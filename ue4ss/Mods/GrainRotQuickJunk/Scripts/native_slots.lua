@@ -230,13 +230,21 @@ function M.describeAction()
         local p=r.parameters[1]
         local name=p.name:lower()
         local ptype=p.type:lower()
-        r.safe=(name:find("slot",1,true)~=nil or name:find("index",1,true)~=nil)
+        r.safe=(name=="inidx" or name:find("slot",1,true)~=nil or name:find("index",1,true)~=nil)
             and (ptype:find("intproperty",1,true)~=nil or ptype:find("byteproperty",1,true)~=nil)
+    end
+    -- Exact game 2026-11-20 ObjectDump: HeldenPlayerController:
+    -- InventoryAction_Server has ONE IntProperty named InIdx (offset 0).
+    -- Some UE4SS builds do not expose UFunction:ForEachProperty to Lua;
+    -- a missing metadata iterator must not disable this verified RPC.
+    if #r.parameters==0 then
+        r.safe=true
+        r.reason="exact_Helden_2026_ObjectDump_InIdx_IntProperty"
     end
     state.signature=r
     local args={}
     for i,p in ipairs(r.parameters) do args[i]=p.name..":"..p.type end
-    warn("InventoryAction_Server parameters=["..table.concat(args,",").."] directIndexSafe="..tostring(r.safe))
+    warn("InventoryAction_Server parameters=["..table.concat(args,",").."] directIndexSafe="..tostring(r.safe).." evidence="..tostring(r.reason))
     return r
 end
 function M.select(pc,pawn,slot)
