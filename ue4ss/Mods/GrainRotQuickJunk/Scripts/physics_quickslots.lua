@@ -221,7 +221,8 @@ end
 function M.new(logger)
     return setmetatable({log=logger or function() end,slots={},pending=nil,
         active=nil,owner=nil,world=nil,queuedSelect=nil,
-        changed=true,dropTicks=0,saveDirty=false,marked={}},M)
+        changed=true,dropTicks=0,saveDirty=false,marked={},
+        unresolvedSlots={}},M)
 end
 function M:count()
     local count=0
@@ -238,7 +239,7 @@ function M:occupied(pawn,expensive)
     local native,n=nativeOccupied(pawn,expensive)
     local slots={}
     for i=1,math.min(10,n) do
-        slots[i]=native[i] or self.slots[i]~=nil
+        slots[i]=native[i] or self.slots[i]~=nil or self.unresolvedSlots[i]==true
     end
     return slots,n
 end
@@ -328,6 +329,9 @@ function M:requestSelect(pawn,slot)
         self:signal()
     end
     local entry=self.slots[slot]
+    if not entry and self.unresolvedSlots[slot] then
+        return false,"saved_physics_actor_not_loaded"
+    end
     if not entry then return false,"no_stored_physics_in_slot" end
     if entry.state=="held" and name(grabTarget(pawn))==name(entry.actor) then
         return true,"already_in_hands"
@@ -507,6 +511,7 @@ function M:resetWorld()
     self.pending=nil;self.active=nil;self.slots={}
     self.owner=nil;self.world=nil;self.queuedSelect=nil
     self.marked={}
+    self.unresolvedSlots={}
     self:signal()
 end
 local DIGITS={"1","2","3","4","5","6","7","8","9","0"}
@@ -531,8 +536,10 @@ function M:refreshUI(pc)
         local txt=get(icon,"InputKeyText")
         if valid(txt) then
             local stored=self.slots[i]~=nil
-            local expected=stored and DIGITS[i].."+" or DIGITS[i]
-            if stored or self.marked[i] or i>=5 then
+            local missing=self.unresolvedSlots[i]==true
+            local expected=stored and DIGITS[i].."+" or
+                (missing and DIGITS[i].."?" or DIGITS[i])
+            if stored or missing or self.marked[i] or i>=5 then
                 local existing
                 pcall(function()
                     local v=txt:GetText()
@@ -543,7 +550,7 @@ function M:refreshUI(pc)
                     if v then pcall(function() txt:SetText(v) end) end
                 end
                 local image=get(icon,"InputIconWidget")
-                if stored then
+                if stored or missing then
                     if not self.marked[i] and valid(image) then
                         local original
                         pcall(function() original=image:GetVisibility() end)
