@@ -87,6 +87,10 @@ assert(saver3:poll(pawn,save))
 assert(quick3:get(1) and quick3:get(1).actor==physics)
 assert(quick3:get(7)==nil,"occupied native slot must not be replaced")
 assert(saver3:checkpoint(save))
+-- Restore the original slot-7 fixture so the following missing-actor
+-- test verifies reservation of a specific old save rather than slot-1
+-- relocation from the native-conflict case above.
+local reset=assert(io.open(f,"wb"));reset:write(payload);reset:close()
 -- Missing actors must retain manifest; no blind spawn of unverified class.
 local quick4=QS.new(log)
 local saver4=Save.new(log,quick4,{root="/tmp"})
