@@ -60,3 +60,7 @@ for line in txt.splitlines():
     if "Function " in line and any(k in line for k in keys2):
         if any(term in line.lower() for term in ("equip","slot","attach","detach","hide","visible","item","holster","activate","select","inventory","bind")):
             print(line[:300])
+
+print("\nHOLSTER ENUM")
+for key in ("EHeldenItemHolsterState","EHeldenInputIconType"):
+    print(key, json.dumps(data["enums"].get(key),ensure_ascii=False)[:6000])
