@@ -251,6 +251,17 @@ local function poll()
                         or hostFor(world)
                     if host then
                         local key=full(pawn)
+                        -- Store only AFTER Grain Rot itself releases RMB.
+                        -- Never call ReleaseComponent, clear PhysGrabData.Target,
+                        -- or attach a grabbed actor (native Fatal Error on v0.2.1).
+                        if session.storage and session.storage.pending then
+                            local done,result=session.storage:tick(pawn)
+                            if done or (result~="awaiting_rmb_release" and
+                                    result~="confirming_release" and result~="idle") then
+                                log("JUNK pending completion="..tostring(done)..
+                                    " result="..tostring(result))
+                            end
+                        end
                         -- One bounded attempt per real player to create six native
                         -- slots; don't keep appending to actor arrays every frame.
                         if session.native then
@@ -488,4 +499,4 @@ else
     if ok then log("fallback sampled animation heartbeat active")
     else log("NO POLLER: "..tostring(err)) end
 end
-log("v0.2.1-contextfix loaded; BP/player fallback & periodic controller/host/slot diagnostics active. LIVE GAME verification required.")
+log("v0.2.2-safetyfix: native 5-0 labels; Junk stores only after Grain Rot releases RMB. UE4SS live-game confirmation pending.")
