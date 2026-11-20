@@ -74,13 +74,8 @@ local function posInFront(pawn)
     local x,y,z=tonumber(read(a,"X")),tonumber(read(a,"Y")),tonumber(read(a,"Z"))
     local fx,fy=tonumber(read(f,"X")),tonumber(read(f,"Y"))
     if not x or not y or not z or not fx or not fy then return nil end
-    if not type or type(FVector)~="function" then
-        -- UE4SS FVector(...) may be unavailable in older 3.x builds;
-        -- don't guess a transform representation.
-        return nil
-    end
-    local ok,p=pcall(FVector,x+fx*135,y+fy*135,z+60)
-    return ok and p or nil
+    -- UE4SS v3 accepts a plain Lua table for FVector UFunction parameters.
+    return {X=x+fx*135,Y=y+fy*135,Z=z+60}
 end
 function Store.new(bank,logger)
     return setmetatable({bank=bank,log=logger or function() end,owner=nil,world=nil},Store)
