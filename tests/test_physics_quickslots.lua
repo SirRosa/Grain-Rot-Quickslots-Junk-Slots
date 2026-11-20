@@ -72,6 +72,15 @@ FindAllOf=function(cls)
 end
 local log={}
 local qs=M.new(function(s) log[#log+1]=s end)
+-- No reliable native UI -> E is forbidden to hide the object. This
+-- protects against a repeat of the user's invisible/unselectable item.
+local badPc=make("HeldenPlayerController","/Game/Test.NoHUD",w)
+function badPc:GetHUD() return nil end
+local blocked,reason=qs:requestStore(pawn,badPc)
+assert(not blocked and reason:find("cannot_show_quickslot_icon",1,true))
+assert(pawn.PhysGrabData.Target==phys and not phys.bHidden,
+    "no HUD must preserve player's RMB-held world actor")
+assert(pawn.nativeReleases==nil)
 local busy,count=qs:occupied(pawn,true)
 assert(count==10 and busy[1] and not busy[2])
 local ok,why=qs:requestStore(pawn)
@@ -186,4 +195,30 @@ qs.slots[2]=nil;qs.changed=true
 assert(qs:refreshUI(pc))
 assert(ui.SlotWidgets[2].InputIcon.InputKeyText.text=="2",
     "native quickslot label must be restored after physical item is removed")
-print("PASS: E stores RMB actor in free 1-0, native release/restore RPC, no physics-handle mutations, full capacity and UI marker")
+-- Native UE4SS struct marshalling can fail. The old v0.3.0 code
+-- re-hid the actor in this case, making it appear lost permanently.
+qs.slots={}
+pawn.EquipedItems={native}
+pawn.PhysGrabData.Target=phys
+function pawn:GrabObject_Server() error("UE4SS rejected HeldenPhysGrabData") end
+assert(qs:requestStore(pawn))
+qs:tick(pawn);qs:tick(pawn)
+assert(phys.bHidden)
+local grabbed,why=qs:requestSelect(pawn,2)
+assert(not grabbed and why:find("item_visible_on_ground",1,true),why)
+assert(phys.bHidden==false and phys.collision==true and mesh.simulates==true,
+    "rejected native grab may NOT leave object hidden")
+assert(qs:count()==0)
+-- Some RPCs dispatch but never set PhysGrabData.Target. After 2 s the
+-- actor must still remain in front, not silently disappear again.
+pawn.PhysGrabData.Target=phys
+function pawn:GrabObject_Server(payload)
+    self.lastNativeGrabPayload=payload -- no target update
+end
+assert(qs:requestStore(pawn))
+qs:tick(pawn);qs:tick(pawn)
+assert(qs:requestSelect(pawn,2))
+for i=1,4 do qs:tick(pawn) end
+assert(qs:count()==0 and phys.bHidden==false,
+    "unconfirmed native grab must also return object to visible world")
+print("PASS: 1-0 native RMB store, real icon gate, inventory full, RPC rejection and delayed failure return visible actor")
