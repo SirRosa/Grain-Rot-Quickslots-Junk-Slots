@@ -434,7 +434,14 @@ local function poll()
                                 session.physics:resolveNativeConflicts(pawn)
                             end
                             if session.physics.changed or session.pollCount%8==0 then
-                                session.physics:refreshUI(pc)
+                                local shown,why=session.physics:refreshUI(pc)
+                                if not shown and session.iconStatus~=why then
+                                    session.iconStatus=why
+                                    log("[PHYS ICON] UI unavailable: "..tostring(why))
+                                elseif shown and session.iconStatus then
+                                    session.iconStatus=nil
+                                    log("[PHYS ICON] original 1-0 slot icons synchronized")
+                                end
                             end
                         end
                         if deepPoll then
