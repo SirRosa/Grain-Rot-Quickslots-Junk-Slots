@@ -100,6 +100,12 @@ assert(gun.PreviousOwner==pawn2 and gun.CurrentInventorySlot==4,
 assert(#pawn2.EquipedItems==1)
 -- Cold load should reconcile from sidecar after process restart with a
 -- native actor having the original DynamicSaveName.
+-- Simulate a fresh process: old live player ownership is gone.
+-- A live actor owned by another current player must not be stolen.
+gun.PreviousOwner=nil
+gun.CurrentSlot=nil
+gun.CurrentInventorySlot=-1
+pawn2.EquipedItems={}
 local loaded=P.new(logger,{root="/tmp"})
 local pawn3=obj("Pawn /Game/Test.PlayerC")
 setupPawn(pawn3)
