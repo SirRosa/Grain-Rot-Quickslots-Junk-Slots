@@ -35,6 +35,7 @@ gun.ItemDurabilityMax=12
 gun.ItemDurability=3
 local gun2=object("HeldenRangedWeapon","HeldenRangedWeapon /Game/Test.WorldGun",world)
 gun2.PreviousOwner=old;gun2.CurrentSlot=nil;gun2.ItemDurabilityMax=10;gun2.ItemDurability=1
+pawn.CharacterStats=object("HeldenCharacterStats","HeldenCharacterStats /Game/Test.PlayerStats",world)
 pawn.EquipedItems={gun}
 pawn.InventorySettings={SlotSettings={{},{},{},{}}}
 pawn.ItemSlots={{},{},{},{}}
