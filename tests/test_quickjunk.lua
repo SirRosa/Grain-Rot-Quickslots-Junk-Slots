@@ -1,4 +1,5 @@
 -- Host-only mock tests. These deliberately do NOT claim live-game behaviour.
+package.path="ue4ss/Mods/GrainRotQuickJunk/Scripts/?.lua;"..package.path
 local messages, binds, hooks = {}, {}, {}
 local poller
 print=function(s) messages[#messages+1]=tostring(s) end
@@ -96,5 +97,8 @@ for _,s in ipairs(messages) do
     if s:find("BLOCKED",1,true) then sawBlock=true end
 end
 assert(sawRefill and sawBlock,"diagnostic must clearly separate supported and unsupported operations")
+for _,s in ipairs(messages) do
+    assert(not s:find("Junk transaction module failed",1,true),"junk model must load")
+end
 print=io.write
 print("PASS: bindings, source actor safety, one refill per entry, host authority, fail-closed junk preview\n")
