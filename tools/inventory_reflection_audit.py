@@ -179,3 +179,14 @@ for key,v in data["structs"].items():
         ("Money" in key and "Widget" not in key) or "Resource" in key):
         if "Icon" in str(v) or "ItemAsset" in key:
             print("ITEM TYPE",key,json.dumps(v,ensure_ascii=False)[:8500])
+
+print("\nCURRENCY TEXTURES IN THE ACTUAL LOADED OBJECT DUMP")
+import re
+matches=[]
+for line in txt.splitlines():
+    if any(q in line.lower() for q in ("goldcoin", "coin_icon", "icon_gold", "t_gold", "money_icon",
+                                      "cointexture", "junk_icon", "scrap_icon")):
+        if any(q in line for q in ("Texture2D", "ObjectProperty", "MaterialInstance", "Icon", "Texture")):
+            matches.append(line[:310])
+for line in matches[:80]: print("ICON TEXTURE",line)
+print("currency matches",len(matches))
