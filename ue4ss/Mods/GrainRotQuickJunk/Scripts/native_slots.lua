@@ -135,6 +135,65 @@ function M.extend(pawn)
     warn("APPENDED six SlotSettings to native player config; waiting for engine-created ItemSlots/HUD. Current ItemSlots="..nativeN)
     return false,"native_engine_rebuild_pending"
 end
+local rebuilt={}
+local function worldPos() -- identity transform, UE4SS v3 table representation
+    return {Rotation={X=0,Y=0,Z=0,W=1},
+        Translation={X=0,Y=0,Z=0},Scale3D={X=1,Y=1,Z=1}}
+end
+function M.rebuildMissing(pawn)
+    if not valid(pawn) then return false,"pawn_invalid" end
+    local key=fullname(pawn)
+    local items=get(pawn,"ItemSlots")
+    local settings=get(get(pawn,"InventorySettings"),"SlotSettings")
+    local count=arrayLen(items)
+    if not key or not count or not settings then return false,"no_native_slots" end
+    if count>=10 then return true,"already_complete" end
+    if rebuilt[key] then return false,"already_attempted" end
+    if count~=4 or arrayLen(settings)~=10 then return false,"unexpected_layout" end
+    local componentClass
+    local fine,cl=pcall(function()
+        return StaticFindObject("/Script/Helden.HeldenInventorySlotComponent")
+    end)
+    if fine and valid(cl) then componentClass=cl end
+    if not componentClass then return false,"slot_component_class_missing" end
+    rebuilt[key]=true
+    warn("native array still has 4 entries; attempting six registered slot components")
+    for i=5,10 do
+        local ok,comp=pcall(function()
+            return pawn:AddComponentByClass(componentClass,false,worldPos(),false)
+        end)
+        if not ok or not valid(comp) then
+            warn("AddComponentByClass failed at "..i..": "..tostring(comp))
+            return false,"component_add_failed"
+        end
+        local setting=get(settings,i)
+        local name=get(setting,"SlotName")
+        if name==nil then return false,"setting_missing_"..i end
+        local assigned,errorString=pcall(function()
+            comp.SlotSetting=setting
+        end)
+        if not assigned then
+            warn("component SlotSetting assignment failed "..i..": "..tostring(errorString))
+            return false,"component_setting_failed"
+        end
+        local appended,appendError=pcall(function()
+            items[i]={SlotName=name,SlotComponent=comp}
+        end)
+        local newN=arrayLen(items)
+        if not appended or not newN or newN<i then
+            warn("native ItemSlots append failed at "..i..": "..tostring(appendError))
+            return false,"native_slot_append_failed"
+        end
+        local added=get(items,i)
+        if not added or fullname(get(added,"SlotComponent"))~=fullname(comp) then
+            warn("native slot component readback mismatch at "..i)
+            return false,"slot_component_readback_failed"
+        end
+    end
+    warn("READY 10/10 native ItemSlots; next verify game input, HUD and replication")
+    return true,"native_slots_extended"
+end
+
 function M.describeAction()
     if state.signature~=nil then return state.signature end
     local r={parameters={},safe=false}
