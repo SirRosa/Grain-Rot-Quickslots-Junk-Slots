@@ -359,14 +359,22 @@ function M:requestSelect(pawn,slot)
     end
     local data=payload(entry,target)
     if not data then
-        stow(entry.actor)
-        return false,"grab_payload_missing"
+        -- Never make an item disappear again if grab restoration fails.
+        self.slots[slot]=nil
+        self:signal()
+        self.log("[PHYS] RECOVERED ON GROUND slot "..slot.." reason=grab_payload_missing")
+        return false,"grab_payload_missing_item_visible_on_ground"
     end
     -- Verified native UFunction: GrabObject_Server(InGrabData:HeldenPhysGrabData).
     local ok,result=call(pawn,"GrabObject_Server",data)
     if not ok then
-        stow(entry.actor)
-        return false,"native_grab_RPC_error_"..tostring(result)
+        -- Cannot rely on native RPC struct marshalling succeeding on every
+        -- UE4SS build. Physical actor remains visible and interactable.
+        self.slots[slot]=nil
+        self:signal()
+        self.log("[PHYS] RECOVERED ON GROUND slot "..slot..
+            " native GrabObject_Server failed: "..tostring(result))
+        return false,"native_grab_failed_item_visible_on_ground_"..tostring(result)
     end
     self.pending={op="equip",actor=entry.actor,entry=entry,
         slot=slot,waits=0,origin=original,world=world(pawn),
@@ -431,16 +439,16 @@ function M:tick(pawn)
                 return true,p.slot
             end
             if p.waits>=4 then
-                -- Do not hide an item held by a different player/handle.
-                if valid(target) then
-                    self.pending=nil
-                    self.slots[p.slot]=nil
-                    self:signal()
-                    return false,"grab_claimed_other_object_visible_on_ground"
-                end
-                stow(p.actor)
+                -- The old code re-hid this actor immediately after a
+                -- server grab timeout: user saw a vanished, inaccessible
+                -- item. Leave it visible and collidable in front of player.
                 self.pending=nil
-                return false,"native_grab_not_confirmed"
+                self.slots[p.slot]=nil
+                self:signal()
+                reveal(p.actor)
+                self.log("[PHYS] RECOVERED ON GROUND slot "..p.slot..
+                    " native grab not confirmed; use RMB to pick it up")
+                return false,"native_grab_not_confirmed_item_visible_on_ground"
             end
             return false,"confirming_native_grab"
         end
