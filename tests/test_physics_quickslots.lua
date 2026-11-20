@@ -31,6 +31,8 @@ local mesh=make("StaticMeshComponent","/Game/Test.PhysMesh",w)
 mesh.simulates=true
 function mesh:SetSimulatePhysics(v) self.simulates=v end
 phys.RootMesh=mesh
+phys.InitConAsset=make("HeldenConstructAsset","/Game/Test.FurnitureAsset",w)
+phys.InitConAsset.Icon=make("Texture2D","/Game/UI/Test.FurnitureThumbnail",w)
 function phys:GetClass()
     return make("Class","/Script/Helden.HeldenPhysicsActor",w)
 end
@@ -178,6 +180,8 @@ qs.slots[2]={slot=2,actor=phys,grab=st.grab,identity="test",state="stored"}
 qs.changed=true
 assert(qs:refreshUI(pc))
 assert(ui.SlotWidgets[2].InputIcon.InputKeyText.text=="2+")
+assert(ui.SlotWidgets[2].Icon.texture==phys.InitConAsset.Icon,
+    "must render actual furniture asset texture in WBP_InventorySlot.Icon")
 qs.slots[2]=nil;qs.changed=true
 assert(qs:refreshUI(pc))
 assert(ui.SlotWidgets[2].InputIcon.InputKeyText.text=="2",
