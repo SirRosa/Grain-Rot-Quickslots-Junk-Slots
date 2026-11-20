@@ -1,4 +1,4 @@
--- Grain Rot Quickslots & Junk Slots, v0.2.1-contextfix.
+-- Grain Rot Quickslots & Junk Slots, v0.2.4-visibility-perf.
 -- UE4SS 3.x, Helden UE 5.7. Source-driven research build.
 -- EXPERIMENTAL: host-only actor storage mutates physics/visibility and native
 -- slot creation may be incompatible with current game saves. Back up saves.
@@ -6,9 +6,9 @@
 local CFG = {
     ElevatorRefill = true,
     PollMillis = 500,
-    LogInventoryProbes = true,
-    LogInputHookOnce = true,
-    MaxProbeEvents = 8,
+    LogInventoryProbes = false, -- opt-in: FindAllOf UI dumps can stall game thread
+    LogInputHookOnce = false, -- no per-action tracing in release
+    MaxProbeEvents = 0,
 }
 local TAG = "[GrainRotQuickJunk] "
 local function log(msg) print(TAG .. tostring(msg) .. "\n") end
@@ -102,7 +102,9 @@ local function refillGun(gun)
     log("REFILL unconfirmed (readback mismatch): "..full(gun))
     return false
 end
-local session={inside={},world=nil,probedWorld=nil,junkIndex=1,probEvents=0,overlapError=false}
+local session={inside={},world=nil,probedWorld=nil,junkIndex=1,probEvents=0,
+    overlapError=false, cachedContexts=nil, cachedElevators={},
+    quickUiReady={}, hudReady=false}
 local hasStore,storeModule=pcall(require,"junk_store")
 if hasStore and type(storeModule)=="table" and type(storeModule.new)=="function" then
     session.bank=storeModule.new(10)
@@ -147,6 +149,13 @@ if hasContext and type(contextModule)=="table" then
     session.context=contextModule
 else
     log("ERROR: player context resolver unavailable: "..tostring(contextModule))
+end
+local hasVisibility,visibilityModule=pcall(require,"extra_item_visibility")
+if hasVisibility and type(visibilityModule)=="table" then
+    session.visibility=visibilityModule
+    session.visibility.setLogger(log)
+else
+    log("ERROR: extra-slot visibility module unavailable: "..tostring(visibilityModule))
 end
 session.pollCount=0
 local function hostFor(world)
@@ -202,12 +211,31 @@ local function probeInventory(pawn)
 end
 local function poll()
     session.pollCount=session.pollCount+1
-    if session.context and session.pollCount%12==1 then
+    -- Tick every 500 ms for pending RMB release and visual changes.
+    -- Heavy object discovery and elevator scans occur only every 2 s.
+    local deepPoll=(session.pollCount==1 or session.pollCount%4==0)
+    local needDiscovery=deepPoll or session.cachedContexts==nil
+    if not needDiscovery and session.cachedContexts then
+        for _,ctx in ipairs(session.cachedContexts) do
+            if not valid(ctx.pawn) or
+                (ctx.world and worldOf(ctx.pawn)~=ctx.world) then
+                needDiscovery=true
+                break
+            end
+        end
+    end
+    if needDiscovery then
+        session.cachedContexts=session.context and session.context.resolveAll()
+            or all("HeldenPlayerController")
+    end
+    if deepPoll then
+        session.cachedElevators=all("HeldenDungeonElevator")
+    end
+    if CFG.LogInventoryProbes and session.context and deepPoll then
         log("DIAG "..session.context.diagnostic())
     end
-    local pcs = session.context and session.context.resolveAll()
-        or all("HeldenPlayerController")
-    local elevators=all("HeldenDungeonElevator")
+    local pcs=session.cachedContexts or {}
+    local elevators=session.cachedElevators or {}
     for _,record in ipairs(pcs) do
         local pc=record.pc or record
         if valid(pc) and not full(pc):find("Default__",1,true) then
@@ -226,32 +254,43 @@ local function poll()
                         session.probedWorld=nil
                         session.overlapError=false
                         session.nativeAttempts={}
+                        session.quickUiReady={}
+                        session.hudReady=false
+                        if session.visibility then session.visibility.reset() end
                         if session.hud then session.hud.reset() end
                         if session.quickUI then session.quickUI.reset() end
                         session.quickUiStatus={}
                         if session.input then session.input.reset() end
                     end
-                    if session.hud then
-                        local isLocal=false
-                        pcall(function() isLocal=pc:IsLocalController() end)
-                        if isLocal then
-                            local shown,why=session.hud.ensure(pc,log)
-                            if shown and session.bank then
-                                session.hud.update(session.bank.selected)
-                            end
-                            if not shown and why=="max_attempts" and not session.hudWarned then
-                                session.hudWarned=true
-                                log("JUNK HUD failed to construct; native widget path unavailable")
-                            end
+                    local isLocal=(record.pc and record.isLocal) or false
+                    if not record.pc then
+                        pcall(function() isLocal=pc:IsLocalController()==true end)
+                    end
+                    if session.hud and isLocal and not session.hudReady and deepPoll then
+                        local shown,why=session.hud.ensure(pc,log)
+                        session.hudReady=shown==true
+                        if shown and session.bank then
+                            session.hud.update(session.bank.selected)
+                        end
+                        if not shown and why=="max_attempts" and not session.hudWarned then
+                            session.hudWarned=true
+                            log("JUNK HUD failed to construct; native widget path unavailable")
                         end
                     end
                     if CFG.LogInventoryProbes and session.probedWorld~=world then
                         session.probedWorld=world
                         probeInventory(pawn)
                     end
+                    -- Purely visual hiding for items 5-10; run locally even
+                    -- on clients, without touching native inventory data.
+                    if session.visibility and isLocal and session.pollCount%2==0 then
+                        session.visibility.sync(pawn)
+                    end
                     -- Do not mutate client inventory. GameMode exists only on server.
+                    -- Context carries host authority from the current scan.
+                    -- Do NOT resolve all controllers/GameModes again on a client.
                     local host=(record.pc and record.auth and record.pc)
-                        or hostFor(world)
+                        or (not session.context and hostFor(world) or nil)
                     if host then
                         local key=full(pawn)
                         -- Store only AFTER Grain Rot itself releases RMB.
@@ -285,41 +324,44 @@ local function poll()
                         end
                         -- Only render the 6 additional native UI widgets after
                         -- the real reflected ItemSlots array contains 10 entries.
-                        if session.quickUI then
+                        if session.quickUI and isLocal and (deepPoll or
+                            not session.quickUiReady[key]) then
+                            -- Successful widgets are checked only every 2s;
+                            -- failed initialization retries on deepPoll.
                             local slotArray=get(pawn,"ItemSlots")
                             local n=0
                             pcall(function() n=#slotArray end)
                             if n>=10 then
-                                local localPc=false
-                                pcall(function() localPc=pc:IsLocalController() end)
-                                if localPc then
-                                    local ready,result=session.quickUI.ensure(pc,pawn,log)
-                                    if session.quickUiStatus==nil then session.quickUiStatus={} end
-                                    if session.quickUiStatus[key]~=result then
-                                        log("QUICK UI ready="..tostring(ready)..
-                                            " result="..tostring(result))
-                                        session.quickUiStatus[key]=result
+                                local ready,result=session.quickUI.ensure(pc,pawn,log)
+                                session.quickUiReady[key]=ready==true
+                                if session.quickUiStatus==nil then session.quickUiStatus={} end
+                                if session.quickUiStatus[key]~=result then
+                                    log("QUICK UI ready="..tostring(ready)..
+                                        " result="..tostring(result))
+                                    session.quickUiStatus[key]=result
+                                end
+                            end
+                        end
+                        if session.storage and session.bank and session.bank:count()>0 then
+                            local state=get(pawn,"CharacterState")
+                            if tonumber(state)==1 or tostring(state):find("Dead",1,true) then
+                                session.storage:recoverAll(pawn,"player_death")
+                            end
+                        end
+                        if deepPoll then
+                            local inside=inElevator(pawn,elevators,world)
+                            if inside and session.inside[key]~=true then
+                                session.inside[key]=true
+                                if CFG.ElevatorRefill then
+                                    local count=0
+                                    for _,gun in pairs(equippedGuns(pawn)) do
+                                        if refillGun(gun) then count=count+1 end
                                     end
+                                    log("elevator ENTRY: refilled weapons="..count.." player="..key)
                                 end
+                            elseif not inside then
+                                session.inside[key]=false
                             end
-                        end
-                        local state=get(pawn,"CharacterState")
-                        if session.storage and session.bank and session.bank:count()>0
-                            and (tonumber(state)==1 or tostring(state):find("Dead",1,true)) then
-                            session.storage:recoverAll(pawn,"player_death")
-                        end
-                        local inside=inElevator(pawn,elevators,world)
-                        if inside and session.inside[key]~=true then
-                            session.inside[key]=true
-                            if CFG.ElevatorRefill then
-                                local count=0
-                                for _,gun in pairs(equippedGuns(pawn)) do
-                                    if refillGun(gun) then count=count+1 end
-                                end
-                                log("elevator ENTRY: refilled weapons="..count.." player="..key)
-                            end
-                        elseif not inside then
-                            session.inside[key]=false
                         end
                     end
                 end
@@ -522,4 +564,4 @@ else
     if ok then log("fallback sampled animation heartbeat active")
     else log("NO POLLER: "..tostring(err)) end
 end
-log("v0.2.3-inputfix: 5-0 uses local HeldenPlayerController via LastPlayerChar when GetPawn=nil; native InventoryAction_Server(InIdx:int).")
+log("v0.2.4-visibility-perf: holstered slots 5-10 invisible; 2s cached discovery; native 1-0 input preserved.")
