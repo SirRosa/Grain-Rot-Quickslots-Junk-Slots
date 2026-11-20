@@ -122,6 +122,17 @@ for i=1,35 do m2:tick(pc,pawn4,save,world) end
 assert(spawns==1,"missing saved actor should be recreated only once")
 assert(#pawn4.EquipedItems==1 and pawn4.EquipedItems[1].CurrentInventorySlot==4)
 assert(pawn4.EquipedItems[1].ItemDurability==23)
+-- During an active dungeon, ExpeditionSaver may also be resurrecting gear.
+-- Never spawn cold-load duplicates, even when an old manifest exists.
+local pawn5=obj("Pawn /Game/Test.PlayerE")
+setupPawn(pawn5)
+found={}
+save.GameState=1 -- EHeldenGameState.InDungeon
+local m3=P.new(logger,{root="/tmp"})
+for i=1,20 do m3:tick(pc,pawn5,save,world) end
+assert(spawns==1 and #pawn5.EquipedItems==0,
+    "dungeon recovery must not spawn duplicates beside ExpeditionSaver")
+save.GameState=0
 -- A user intentionally moves/drops the last extra-slot item and immediately
 -- saves: successful native save completion must write EMPTY, not resurrect it.
 pawn4.EquipedItems={}
