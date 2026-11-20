@@ -129,6 +129,13 @@ if hasHud and type(hudModule)=="table" then
 else
     log("ERROR: game-native Junk HUD unavailable: "..tostring(hudModule))
 end
+local hasInput,inputModule=pcall(require,"input_bridge")
+if hasInput and type(inputModule)=="table" then
+    session.input=inputModule
+    session.input.setLogger(log)
+else
+    log("ERROR: native inventory input calibration unavailable: "..tostring(inputModule))
+end
 local function hostFor(world)
     for _,class in ipairs({"HeldenGameMode","GameModeBase"}) do
         for _,gm in ipairs(all(class)) do
@@ -197,6 +204,7 @@ local function poll()
                         session.overlapError=false
                         session.nativeAttempts={}
                         if session.hud then session.hud.reset() end
+                        if session.input then session.input.reset() end
                     end
                     if session.hud then
                         local isLocal=false
@@ -311,6 +319,8 @@ local function onInput(action,source)
             log("JUNK "..source.." retrieve="..tostring(success)..
                 " result="..tostring(result))
         end
+    elseif action:find("learn_",1,true)==1 then
+        if session.input then session.input.mark(tonumber(action:sub(7))) end
     elseif action:find("quick_",1,true)==1 then
         local slot=tonumber(action:sub(7))
         local pawn=localPawn()
@@ -326,6 +336,14 @@ local function onInput(action,source)
             log("QUICK "..tostring(slot).." unavailable: native module missing")
         else
             local success,reason=session.native.select(pc,pawn,slot)
+            if not success and session.input and pawn and pc then
+                local nativeSlots=get(pawn,"ItemSlots")
+                local n=0
+                pcall(function() n=#nativeSlots end)
+                if n>=slot then
+                    success,reason=session.input.activate(pc,slot)
+                end
+            end
             log("QUICK "..tostring(slot).." native select="..tostring(success)..
                 " outcome="..tostring(reason))
         end
@@ -367,14 +385,19 @@ bind("H","junk_take")
 bind("OEM_COMMA","junk_prev",true)
 bind("OEM_PERIOD","junk_next",true)
 for n,keyName in ipairs({"ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE","ZERO"}) do
-    -- 1-4 remain native. Intercepting those would duplicate/conflict with base input.
-    if n>=5 then bind(keyName,"quick_"..n) end
+    -- Keybinds 1-4 only mark baseline samples; they NEVER issue any
+    -- game command. The game's own original input handling stays primary.
+    if n<5 then bind(keyName,"learn_"..n)
+    else bind(keyName,"quick_"..n) end
 end
 -- Read-only prehook: collect actual signature of key native inventory action.
 local function probeHook(path,label)
     if type(RegisterHook)~="function" then return end
     local ok,err=pcall(function()
         RegisterHook(path,function(context,...)
+            if label=="InventoryAction_Server" and session.input then
+                session.input.observe(context,...)
+            end
             if session.probEvents>=CFG.MaxProbeEvents then return end
             session.probEvents=session.probEvents+1
             local args={...}
