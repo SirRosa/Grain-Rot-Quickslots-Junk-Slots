@@ -236,6 +236,9 @@ local function poll()
                         pcall(function() isLocal=pc:IsLocalController() end)
                         if isLocal then
                             local shown,why=session.hud.ensure(pc,log)
+                            if shown and session.bank then
+                                session.hud.update(session.bank.selected)
+                            end
                             if not shown and why=="max_attempts" and not session.hudWarned then
                                 session.hudWarned=true
                                 log("JUNK HUD failed to construct; native widget path unavailable")
@@ -344,7 +347,8 @@ local function onInput(action,source)
         else
             session.junkIndex=(session.junkIndex+8)%10+1
         end
-        log("JUNK preview: selected "..session.junkIndex.."/10; no item transferred")
+        if session.hud then session.hud.update(session.junkIndex) end
+        log("JUNK selected "..session.junkIndex.."/10")
     elseif action=="junk_next" then
         if session.bank then
             session.bank:cycle(1)
@@ -352,7 +356,8 @@ local function onInput(action,source)
         else
             session.junkIndex=session.junkIndex%10+1
         end
-        log("JUNK preview: selected "..session.junkIndex.."/10; no item transferred")
+        if session.hud then session.hud.update(session.junkIndex) end
+        log("JUNK selected "..session.junkIndex.."/10")
     elseif action=="junk_put" then
         local pawn=localPawn()
         local grabbed=pawn and get(get(pawn,"PhysGrabData"),"Target")
