@@ -19,3 +19,10 @@ print("\nRELATED KEY/INPUT TYPES")
 for n,v in data["structs"].items():
     if any(t.lower() in n.lower() for t in ("HeldenInventorySlotWidget","HeldenInventorySlotComponent","HeldenInput","HeldenPhysGrabInterface")):
         print(n, json.dumps(v,ensure_ascii=False)[:10000])
+
+print('\nOBJECT DUMP METHODS')
+parts=b''.join(p.read_bytes() for p in sorted(Path('reference/data').glob('UE4SS-ObjectDump.txt.gz.part*')))
+txt=gzip.decompress(parts).decode('utf-8',errors='replace')
+keys=('HeldenInputIconWidget','WBP_InventorySlot_C','HeldenPlayerController.InventoryAction','HeldenCharacter.Grab','HeldenCharacter.Drop','HeldenCharacter.Release','HeldenCharacter.Holster','HeldenInventorySlotWidget','HeldenInventoryWidget')
+results=[line for line in txt.splitlines() if any(k.lower() in line.lower() for k in keys)]
+for line in results[:160]: print(line[:300])
