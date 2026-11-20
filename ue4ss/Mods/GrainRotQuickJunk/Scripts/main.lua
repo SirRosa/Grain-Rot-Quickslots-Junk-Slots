@@ -136,13 +136,24 @@ if hasInput and type(inputModule)=="table" then
 else
     log("ERROR: native inventory input calibration unavailable: "..tostring(inputModule))
 end
+local hasContext,contextModule=pcall(require,"player_context")
+if hasContext and type(contextModule)=="table" then
+    session.context=contextModule
+else
+    log("ERROR: player context resolver unavailable: "..tostring(contextModule))
+end
+session.pollCount=0
 local function hostFor(world)
+    if session.context then
+        local ctx=session.context.pickLocal()
+        if ctx and ctx.world==world and ctx.auth then return ctx.pc end
+        return nil
+    end
+    -- Only for older mock environments without the new context module.
     for _,class in ipairs({"HeldenGameMode","GameModeBase"}) do
         for _,gm in ipairs(all(class)) do
-            local path=full(gm)
-            if valid(gm) and not path:find("Default__",1,true) and worldOf(gm)==world then
-                return gm
-            end
+            if valid(gm) and not full(gm):find("Default__",1,true)
+                and worldOf(gm)==world then return gm end
         end
     end
     return nil
@@ -184,14 +195,20 @@ local function probeInventory(pawn)
     end
 end
 local function poll()
-    local pcs=all("HeldenPlayerController")
+    session.pollCount=session.pollCount+1
+    if session.context and session.pollCount%12==1 then
+        log("DIAG "..session.context.diagnostic())
+    end
+    local pcs = session.context and session.context.resolveAll()
+        or all("HeldenPlayerController")
     local elevators=all("HeldenDungeonElevator")
-    for _,pc in ipairs(pcs) do
+    for _,record in ipairs(pcs) do
+        local pc=record.pc or record
         if valid(pc) and not full(pc):find("Default__",1,true) then
-            local pawn
-            pcall(function() pawn=pc:GetPawn() end)
-            if isA(pawn,"HeldenCharacter") then
-                local world=worldOf(pawn)
+            local pawn=record.pawn
+            if not pawn then pcall(function() pawn=pc:GetPawn() end) end
+            if valid(pawn) and (session.context or isA(pawn,"HeldenCharacter")) then
+                local world=record.world or worldOf(pawn)
                 if world then
                     if session.world~=world then
                         if session.bank and session.bank:count()>0 then
@@ -222,7 +239,8 @@ local function poll()
                         probeInventory(pawn)
                     end
                     -- Do not mutate client inventory. GameMode exists only on server.
-                    local host=hostFor(world)
+                    local host=(record.pc and record.auth and record.pc)
+                        or hostFor(world)
                     if host then
                         local key=full(pawn)
                         -- One bounded attempt per real player to create six native
@@ -263,19 +281,16 @@ local function poll()
     end
 end
 local function localPawn()
-    local first=nil
-    for _,pc in ipairs(all("HeldenPlayerController")) do
-        if valid(pc) and not full(pc):find("Default__",1,true) then
-            local pawn
-            pcall(function() pawn=pc:GetPawn() end)
-            if isA(pawn,"HeldenCharacter") then
-                first=first or pawn
-                local ok,localController=pcall(function() return pc:IsLocalController() end)
-                if ok and localController==true then return pawn end
-            end
-        end
+    if session.context then
+        local e=session.context.pickLocal()
+        return e and e.pawn or nil
     end
-    return first
+    for _,pc in ipairs(all("HeldenPlayerController")) do
+        local pawn
+        pcall(function() pawn=pc:GetPawn() end)
+        if valid(pawn) and isA(pawn,"HeldenCharacter") then return pawn end
+    end
+    return nil
 end
 local function onInput(action,source)
     if action=="junk_prev" then
@@ -299,7 +314,8 @@ local function onInput(action,source)
         local grabbed=pawn and get(get(pawn,"PhysGrabData"),"Target")
         local world=pawn and worldOf(pawn)
         if not pawn or not world or not hostFor(world) then
-            log("JUNK "..source.." ERROR: authoritative host pawn unavailable")
+            log("JUNK "..source.." ERROR: authoritative pawn unavailable; "..
+                (session.context and session.context.diagnostic() or "legacy resolver"))
         elseif not session.storage then
             log("JUNK "..source.." ERROR: storage module missing")
         else
@@ -311,7 +327,8 @@ local function onInput(action,source)
         local pawn=localPawn()
         local world=pawn and worldOf(pawn)
         if not pawn or not world or not hostFor(world) then
-            log("JUNK "..source.." ERROR: authoritative host pawn unavailable")
+            log("JUNK "..source.." ERROR: authoritative pawn unavailable; "..
+                (session.context and session.context.diagnostic() or "legacy resolver"))
         elseif not session.storage then
             log("JUNK "..source.." ERROR: storage module missing")
         else
