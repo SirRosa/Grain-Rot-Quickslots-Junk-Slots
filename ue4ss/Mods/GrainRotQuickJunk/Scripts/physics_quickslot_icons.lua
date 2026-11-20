@@ -53,6 +53,13 @@ function M.canRender(pc,slot)
     if not valid(img) or not valid(label) then
         return false,"icon_or_label_widget_missing_"..slot
     end
+    if not FText then
+        return false,"FText_unavailable_cannot_mark_slot"
+    end
+    local exists=pcall(function() return FText("JUNK") end)
+    if not exists then
+        return false,"FText_failed_cannot_mark_slot"
+    end
     return true,"native_WBP_InventorySlot_ready"
 end
 local function itemTexture(actor)
@@ -175,6 +182,10 @@ local function paint(slot,entry,pc)
                 ok=pcall(function() img:SetBrushResourceObject(tex) end)
             end
             if not ok then tex=nil;source="text_currency" end
+        else
+            -- Clear any old thumbnail; never show an unrelated weapon when
+            -- the new junk object has no actual image.
+            pcall(function() img:SetBrushFromTexture(nil,false) end)
         end
         before.identity=id
         before.texture=tex
