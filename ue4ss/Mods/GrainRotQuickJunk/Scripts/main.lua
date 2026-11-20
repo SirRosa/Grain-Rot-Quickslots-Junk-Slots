@@ -157,6 +157,40 @@ if hasVisibility and type(visibilityModule)=="table" then
 else
     log("ERROR: extra-slot visibility module unavailable: "..tostring(visibilityModule))
 end
+-- Game's native load/respawn resolves ItemSaveData.OwningSlot by name.
+-- Configure the player Blueprint CDO *before* the game creates the pawn.
+-- Do not wait until the normal inventory poll, which runs after deserialization.
+session.defaultsReady=false
+local function ensureDefaultSlots(reason)
+    if session.defaultsReady or not session.native or
+        type(session.native.extendDefaults)~="function" then return end
+    local ok,why=session.native.extendDefaults()
+    if ok then
+        session.defaultsReady=true
+        log("PRESPAWN CDO ready: "..tostring(why).." source="..tostring(reason))
+    elseif session.defaultStatus~=why then
+        session.defaultStatus=why
+        log("PRESPAWN CDO pending: "..tostring(why).." source="..tostring(reason))
+    end
+end
+ensureDefaultSlots("mod_initialization")
+if type(RegisterHook)=="function" then
+    -- Executed before native save loading / character respawn. Does not
+    -- override parameters or return values of either function.
+    for _,spec in ipairs({
+       {path="/Script/Helden.HeldenGameInstance:LoadGame",tag="LoadGame"},
+       {path="/Script/Helden.HeldenGameInstance:LoadLastSaveGame",tag="LoadLastSaveGame"},
+       {path="/Script/Helden.HeldenPlayerController:RespawnCharacter_Server",tag="Respawn"}
+    }) do
+        local ok,err=pcall(function()
+            RegisterHook(spec.path,function()
+                ensureDefaultSlots(spec.tag)
+            end)
+        end)
+        if not ok then log("PRESPAWN hook unavailable: "..spec.tag.." "..tostring(err)) end
+    end
+end
+
 session.pollCount=0
 local function hostFor(world)
     if session.context then
@@ -233,6 +267,9 @@ local function poll()
     end
     if CFG.LogInventoryProbes and session.context and deepPoll then
         log("DIAG "..session.context.diagnostic())
+    end
+    if not session.defaultsReady and deepPoll then
+        ensureDefaultSlots("poll_retry")
     end
     local pcs=session.cachedContexts or {}
     local elevators=session.cachedElevators or {}
@@ -565,4 +602,4 @@ else
     if ok then log("fallback sampled animation heartbeat active")
     else log("NO POLLER: "..tostring(err)) end
 end
-log("v0.2.4-visibility-perf: holstered slots 5-10 invisible; 2s cached discovery; native 1-0 input preserved.")
+log("v0.2.5-compat-prespawn: configure Blueprint CDO before LoadGame/Respawn, restoring stable native quickslot names.")
