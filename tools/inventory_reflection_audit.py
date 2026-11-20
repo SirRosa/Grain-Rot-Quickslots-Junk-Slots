@@ -111,3 +111,26 @@ for key in ("HeldenNetworkTimer","Vector_NetQuantize","Vector_NetQuantizeNormal"
             "HeldenPhysicsActor","HeldenActorSaveData"):
     v=data["structs"].get(key)
     if v: print("STRUCT",key,json.dumps(v,ensure_ascii=False)[:11000])
+
+print("\nUI INSPECTION (phys quickbar icon candidates)")
+for key,v in data["structs"].items():
+    lower=key.lower()
+    if any(k in lower for k in ("inventoryslot", "inventorywidget", "physgrab", "itemasset",
+                                  "constructasset", "physicsasset", "moneywidget", "itemicon",
+                                  "iconwidget", "inventoryelement", "itemdisplay",
+                                  "quickslot")):
+        if any(q in lower for q in ("slot","widget","asset","icon")):
+            print("FIELD",key,json.dumps(v,ensure_ascii=False)[:9000])
+for idx,line in enumerate(txt.splitlines()):
+    low=line.lower()
+    if "function " in low and any(p in low for p in ("wbp_inventoryslot",
+            "heldeninventoryslotwidget","heldeninventorywidget","heldenphysicsactor:",
+            "heldenconstructassetdata", "heldeninspectwidget")):
+        if any(k in low for k in ("icon", "item", "set", "brush", "image","texture","render",
+                                   "update","grab","inspect","asset","construct","widget")):
+            print("UFUNCTION",line[:250])
+print("\nUMG IMAGE AND BRUSH FUNCTIONS")
+for line in txt.splitlines():
+    low=line.lower()
+    if "function /script/umg.image:" in low and any(k in low for k in ("setbrushfrom","setbrush","setopacity")):
+        print("UFUNCTION",line[:260])
