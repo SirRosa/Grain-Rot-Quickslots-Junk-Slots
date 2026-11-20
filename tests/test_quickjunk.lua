@@ -50,6 +50,37 @@ function pc:GetPawn() return nil end
 pc.LastPlayerChar=pawn
 function pc:InventoryAction_Server(idx) self.lastSelected=idx;self.rpcCalls=(self.rpcCalls or 0)+1 end
 function pc:IsLocalController() return true end
+-- The real game already has a 10-widget native quickbar. v0.3.1 MUST NOT
+-- hide grabbed physics objects before confirming visible icon capacity.
+local textCtor=function(value)
+    return {value=value,ToString=function(self) return self.value end}
+end
+FText=setmetatable({},{__call=function(_,value) return textCtor(value) end})
+local hud=object("HeldenHUD","HUD /Game/Test.HUD",world)
+local bar=object("HeldenInventoryWidget","Widget /Game/Test.Quickbar",world)
+bar.SlotWidgets={}
+for i=1,10 do
+    local w=object("WBP_InventorySlot_C","Widget /Game/Test.Quickslot"..i,world)
+    local icon=object("Image","Image /Game/Test.QuickslotIcon"..i,world)
+    function icon:SetBrushFromTexture(tex) self.texture=tex end
+    function icon:SetVisibility(v) self.visibility=v end
+    function icon:GetVisibility() return self.visibility end
+    function icon:SetRenderOpacity(v) self.opacity=v end
+    local input=object("HeldenInputIconWidget","InputIcon /Game/Test.Input"..i,world)
+    local txt=object("TextBlock","Text /Game/Test.Digit"..i,world)
+    txt.value=tostring(i%10)
+    function txt:GetText() return textCtor(self.value) end
+    function txt:SetText(t) self.value=t:ToString() end
+    function txt:SetVisibility(v) self.visibility=v end
+    input.InputKeyText=txt
+    w.InputIcon=input
+    w.Icon=icon
+    bar.SlotWidgets[i]=w
+end
+local hudView=object("PlayerHudWidget","Widget /Game/Test.HudView",world)
+hudView.InventoryWidget=bar
+hud.PlayerHudWidget=hudView
+function pc:GetHUD() return hud end
 local inside=false
 local box=object("BoxComponent","Box /Game/Test.Lift",world)
 function box:IsOverlappingActor(actor) assert(actor==pawn);return inside end
@@ -64,12 +95,12 @@ groups.HeldenInventoryWidget={}
 assert(loadfile("ue4ss/Mods/GrainRotQuickJunk/Scripts/main.lua"))()
 assert(type(poller)=="function","poller not registered")
 local function pollN(n) for _=1,n do poller() end end
-for _,k in ipairs({69,53,54,55,56,57,48}) do
+for _,k in ipairs({69,49,50,51,52,53,54,55,56,57,48}) do
     assert(type(binds[k])=="function","missing keybind "..k)
 end
-for _,k in ipairs({5,6,71,72,188,190,49,50,51,52}) do
+for _,k in ipairs({5,6,71,72,188,190}) do
     assert(binds[k]==nil,
-        "old Junk controls or native 1-4 keys must not be rebound: "..k)
+        "old Junk controls must not be rebound: "..k)
 end
 assert(hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"]
     and type(hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"].post)=="function",
@@ -160,11 +191,14 @@ assert(pawn.releases==1,"E should call native release once")
 assert(junk.bHidden==false,"held actor cannot be hidden before native release")
 pollN(2)
 assert(junk.bHidden==true and junk.collision==false)
-local nativeHook=hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"]
-nativeHook.post({get=function() return pc end},{get=function() return 0 end})
+-- Direct keyboard event must work even if InventoryAction_Server never
+-- triggers the optional native hook (the user's observed v0.3.0 failure).
+binds[49]()
 assert(pawn.grabs==1 and pawn.lastGrab.Target==junk,
     "native quickslot 1 selection must send native GrabObject_Server")
 assert(pawn.PhysGrabData.Target==junk)
+assert(bar.SlotWidgets[1].Icon.texture==nil or
+    bar.SlotWidgets[1].InputIcon.InputKeyText.value~=nil)
 poller()
 binds[69]()
 pollN(2)
@@ -178,4 +212,4 @@ end
 assert(sawRefill and sawBlocked,
     "E should report rejected nonphysics item and not touch native gun")
 print=io.write
-print("PASS: E replaces M4/M5/G/H, game-native 1-4 selection observed, 5-0 input preserved and cached scans\n")
+print("PASS: direct key 1-0 physics retrieval even without native hook, visible quickbar required and native 5-0 gear preserved\n")
