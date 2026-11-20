@@ -1,4 +1,4 @@
--- Grain Rot Quickslots & Junk Slots, v0.2.0-experimental.
+-- Grain Rot Quickslots & Junk Slots, v0.2.1-contextfix.
 -- UE4SS 3.x, Helden UE 5.7. Source-driven research build.
 -- EXPERIMENTAL: host-only actor storage mutates physics/visibility and native
 -- slot creation may be incompatible with current game saves. Back up saves.
@@ -249,6 +249,11 @@ local function poll()
                             local tries=session.nativeAttempts[key] or 0
                             if tries<4 then
                                 local extended,reason=session.native.extend(pawn)
+                                if tries==0 or tries==3 then
+                                    log("NATIVE slot attempt="..(tries+1)..
+                                        " success="..tostring(extended)..
+                                        " result="..tostring(reason).." player="..key)
+                                end
                                 if tries==3 and reason=="native_slots_not_created" then
                                     local done,msg=session.native.rebuildMissing(pawn)
                                     log("NATIVE slot component rebuild="..tostring(done)..": "..tostring(msg))
@@ -455,4 +460,4 @@ else
     if ok then log("fallback sampled animation heartbeat active")
     else log("NO POLLER: "..tostring(err)) end
 end
-log("v0.2.0-experimental loaded; host actor Junk storage enabled, 10-slot native extension attempted; LIVE GAME validation required.")
+log("v0.2.1-contextfix loaded; BP/player fallback & periodic controller/host/slot diagnostics active. LIVE GAME verification required.")
