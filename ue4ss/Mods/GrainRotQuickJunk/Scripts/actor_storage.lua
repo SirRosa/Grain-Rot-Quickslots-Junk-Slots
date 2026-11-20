@@ -23,6 +23,24 @@ local function isA(o,name)
     if not valid(o) then return false end
     local ok,result=pcall(function() return o:IsA("/Script/Helden."..name) end)
     if ok and result==true then return true end
+    -- The observed UE4SS v3 player BP problem also affects physics actors:
+    -- some builds expect UObject:IsA(UClass) rather than IsA(string).
+    local cls
+    pcall(function() cls=o:GetClass() end)
+    for _=1,16 do
+        if not valid(cls) then break end
+        local s=path(cls) or ""
+        if s:find(name,1,true) then return true end
+        local parent
+        pcall(function() parent=cls:GetSuperStruct() end)
+        cls=parent
+    end
+    if name=="HeldenPhysicsActor" then
+        -- The live physics grab target must expose the native Helden actor
+        -- mesh and health/physics metadata. Actor ownership is verified later.
+        local mesh=read(o,"RootMesh")
+        return valid(mesh) and read(o,"bCanBeGrabbed")~=nil
+    end
     return false
 end
 local function invoke(o,method,...)
