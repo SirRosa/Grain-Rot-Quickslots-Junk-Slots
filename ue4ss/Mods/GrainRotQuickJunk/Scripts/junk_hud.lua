@@ -24,6 +24,34 @@ local function queryObject(path)
     local ok,obj=pcall(StaticFindObject,path)
     return ok and valid(obj) and obj or nil
 end
+local function updateJunkLabel(widget,index)
+    if not valid(widget) then return false,"widget_not_created" end
+    local input=get(widget,"InputIcon")
+    if not valid(input) then return false,"input_icon_missing" end
+    local label=get(input,"InputKeyText")
+    if not valid(label) or FText==nil then return false,"native_text_missing" end
+    local key="J"..tostring(index)
+    local current
+    pcall(function() current=label:GetText():ToString() end)
+    if current==key then return true,"unchanged" end
+    local ok,text=pcall(FText,key)
+    if not ok or text==nil then return false,"ftext_constructor_failed" end
+    local fine,err=pcall(function()
+        input.IconType=1 -- EHeldenInputIconType.Key, not "Action"/Ctrl
+        input.bUseGamepadAction=false
+        label:SetText(text)
+        label:SetVisibility(0)
+    end)
+    if not fine then return false,tostring(err) end
+    local picture=get(input,"InputIconWidget")
+    if valid(picture) then pcall(function() picture:SetVisibility(2) end) end
+    return true,"updated"
+end
+function M.update(index)
+    if not valid(M.widget) then return false,"missing_junk_widget" end
+    return updateJunkLabel(M.widget,index)
+end
+
 function M.ensure(pc,log)
     if valid(M.widget) then return true,"exists" end
     if M.attempts>=12 then return false,"max_attempts" end
@@ -67,6 +95,10 @@ function M.ensure(pc,log)
     end
     pcall(function() widget:SetVisibility(4) end) -- SelfHitTestInvisible.
     M.widget=widget
+    local labeled,why=M.update(1)
+    if type(log)=="function" then
+        log("[JUNK HUD] label J1="..tostring(labeled).." reason="..tostring(why))
+    end
     if type(log)=="function" then
         log("[JUNK HUD] game-native slot widget added at bottom-right")
     end
