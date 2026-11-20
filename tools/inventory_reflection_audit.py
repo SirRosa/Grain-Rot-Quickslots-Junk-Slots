@@ -87,3 +87,20 @@ for line in txt.splitlines():
                                "Default__HeldenCharacter", "Default__BP_HeldenCharacter")):
         if any(word in line for word in ("Default__", "Class ", "InventorySettings", "ItemSlots")):
             print(line[:350])
+
+print("\nPHYSICS GRAB UFUNCTION SIGNATURES AND NATIVE STATE")
+lines=txt.splitlines()
+for idx,line in enumerate(lines):
+    if "Function /Script/Helden." in line and any(k in line for k in (
+        "GrabObject_Server", "GrabObject_Auth", "ReleaseObject_Server",
+        "ReleaseObject_Auth", "DropItem_Server", "InventoryAction_Server",
+        "Interact_Server", "StartPhys", "EndPhys", "SetPhysGrab",
+        "SetGrab", "GrabObject", "ReleaseObject")):
+        print("FUNCTION",line[:330])
+        for follow in lines[idx+1:idx+16]:
+            if "Function " in follow or "Class " in follow: break
+            if any(x in follow for x in ("Property ", "Param", "InObject", "InTarget", "Target", "HitResult", "Object", "Phys")):
+                print("  ",follow[:310])
+for key in ("HeldenPhysGrabData","HeldenPhysicsActor","EHeldenPhysGrabState","EHeldenCharacterControllerState"):
+    item=data["structs"].get(key) or data["enums"].get(key)
+    print("TYPE",key,json.dumps(item,ensure_ascii=False)[:17000])
