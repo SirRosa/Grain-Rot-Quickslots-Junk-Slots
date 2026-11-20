@@ -41,7 +41,9 @@ pawn.InventorySettings={SlotSettings={{},{},{},{}}}
 pawn.ItemSlots={{},{},{},{}}
 pawn.PhysGrabData={Target=gun2}
 local pc=object("HeldenPlayerController","PC /Game/Test.Controller",world)
-function pc:GetPawn() return pawn end
+function pc:GetPawn() return nil end
+pc.LastPlayerChar=pawn
+function pc:InventoryAction_Server(idx) self.lastSelected=idx;self.rpcCalls=(self.rpcCalls or 0)+1 end
 function pc:IsLocalController() return true end
 local inside=false
 local box=object("BoxComponent","Box /Game/Test.Lift",world)
@@ -90,6 +92,17 @@ binds[190]()
 binds[48]()
 assert(gun2.ItemDurability==before and gun2.alive,"preview must not mutate grabbed world item")
 assert(pawn.PhysGrabData.Target==gun2,"grabbed object must remain unchanged")
+-- LIVE regression from UE4SS(6).log: GetPawn() is nil, but
+-- LastPlayerChar is the valid character whose slots reach 10.
+-- The game accepts a reflected InventoryAction_Server(InIdx:int).
+for i=5,10 do pawn.ItemSlots[i]={SlotName="GrainRotQuick"..i} end
+local bindings={{53,4},{54,5},{55,6},{56,7},{57,8},{48,9}}
+for _,entry in ipairs(bindings) do
+    binds[entry[1]]()
+    assert(pc.lastSelected==entry[2],
+        "pressing number key must dispatch the correct zero-based inventory slot")
+end
+assert(pc.rpcCalls==6,"all six new hotkeys must trigger server inventory RPC")
 assert(type(hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"])=="function",
     "read-only inventory RPC probe must register")
 local sawRefill,sawStoreResult=false,false
@@ -102,4 +115,4 @@ for _,s in ipairs(messages) do
     assert(not s:find("Junk transaction module failed",1,true),"junk model must load")
 end
 print=io.write
-print("PASS: bindings, source actor safety, one refill per entry, host authority, fail-closed junk preview\n")
+print("PASS: key 5-0 selects 0-based 4-9 with nil GetPawn and LastPlayerChar, source actor safety and refill\n")
