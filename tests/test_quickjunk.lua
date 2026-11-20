@@ -118,8 +118,8 @@ for _,entry in ipairs(bindings) do
         "pressing number key must dispatch the correct zero-based inventory slot")
 end
 assert(pc.rpcCalls==6,"all six new hotkeys must trigger server inventory RPC")
-assert(type(hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"])=="function",
-    "read-only inventory RPC probe must register")
+assert(hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"]==nil,
+    "release build must not install unused hotkey monitoring hooks")
 local sawRefill,sawStoreResult=false,false
 for _,s in ipairs(messages) do
     if s:find("REFILL",1,true) then sawRefill=true end
