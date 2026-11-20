@@ -21,7 +21,7 @@ StaticFindObject=function(s)
     if s=="/Script/Helden.HeldenInventorySlotComponent" then return klass end
     if s=="/Script/Helden.HeldenPlayerController:InventoryAction_Server" then return fn end
 end
-FName=function(s) return tostring(s) end
+FName=setmetatable({}, {__call=function(_,s) return tostring(s) end})
 local xform={Rotation={X=0,Y=0,Z=0,W=1},
     Translation={X=0,Y=0,Z=0},Scale3D={X=1,Y=1,Z=1}}
 local function nativeArray()
@@ -70,9 +70,13 @@ for i=1,4 do
         Socket="None",SlotName="Quick"..i,RelativeTransform=xform
     }
 end
-local before=#noBridgePawn.InventorySettings.SlotSettings
+local orig=noBridgePawn.InventorySettings.SlotSettings
+setmetatable(orig,{__newindex=function(_,key,_)
+    error("simulated reflected TArray append failure at "..tostring(key))
+end})
+local before=#orig
 local no,reason=mod.extend(noBridgePawn)
-assert(not no and reason=="requires_native_array_bridge")
+assert(not no and reason=="array_append_failed")
 assert(#noBridgePawn.InventorySettings.SlotSettings==before,
     "no out-of-bounds write should happen without native array bridge")
 io.write("PASS: safe append bridge, 4->10 mock slots, readback, no unsafe native TArray indexing\\n")
