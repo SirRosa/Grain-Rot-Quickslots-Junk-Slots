@@ -46,6 +46,13 @@ local function configureLabel(widget,slot,log)
     if not valid(icon) then return false,"native_input_icon_missing" end
     local digit=DIGITS[slot-4]
     local keyName=KEY_NAMES[slot-4]
+    local inputText=get(icon,"InputKeyText")
+    if not valid(inputText) then return false,"InputKeyText_missing" end
+    local existing
+    pcall(function() existing=textValue(inputText:GetText()) end)
+    -- A 500ms poll calls ensure repeatedly. Do not allocate FText, reset
+    -- widgets or flood logs when the correct digit is already visible.
+    if existing==digit then return true,"already_"..digit end
     -- The default cloned widget still points to its asset's keyboard action
     -- and displays a modifier such as Ctrl. Force "Key" mode instead.
     local key=makeName(keyName)
@@ -59,8 +66,6 @@ local function configureLabel(widget,slot,log)
     pcall(function() icon.bUseGamepadAction=false end)
     -- Explicit visual label is necessary: key-binding layout is computed
     -- separately by the game and needs not correspond to synthetic slots.
-    local inputText=get(icon,"InputKeyText")
-    if not valid(inputText) then return false,"InputKeyText_missing" end
     local literal=makeText(digit)
     if not literal then return false,"FText_constructor_missing" end
     local ok,err=pcall(function() inputText:SetText(literal) end)
