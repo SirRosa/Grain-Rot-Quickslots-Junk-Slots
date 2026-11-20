@@ -123,6 +123,12 @@ if hasNative and type(nativeModule)=="table" then
 else
     log("ERROR: native inventory extension unavailable: "..tostring(nativeModule))
 end
+local hasHud,hudModule=pcall(require,"junk_hud")
+if hasHud and type(hudModule)=="table" then
+    session.hud=hudModule
+else
+    log("ERROR: game-native Junk HUD unavailable: "..tostring(hudModule))
+end
 local function hostFor(world)
     for _,class in ipairs({"HeldenGameMode","GameModeBase"}) do
         for _,gm in ipairs(all(class)) do
@@ -181,10 +187,27 @@ local function poll()
                 local world=worldOf(pawn)
                 if world then
                     if session.world~=world then
+                        if session.bank and session.bank:count()>0 then
+                            log("WARNING: world changed with "..session.bank:count()..
+                                " junk actors; check save/old actors before continuing")
+                        end
                         session.world=world
                         session.inside={}
                         session.probedWorld=nil
                         session.overlapError=false
+                        session.nativeAttempts={}
+                        if session.hud then session.hud.reset() end
+                    end
+                    if session.hud then
+                        local isLocal=false
+                        pcall(function() isLocal=pc:IsLocalController() end)
+                        if isLocal then
+                            local shown,why=session.hud.ensure(pc,log)
+                            if not shown and why=="max_attempts" and not session.hudWarned then
+                                session.hudWarned=true
+                                log("JUNK HUD failed to construct; native widget path unavailable")
+                            end
+                        end
                     end
                     if CFG.LogInventoryProbes and session.probedWorld~=world then
                         session.probedWorld=world
