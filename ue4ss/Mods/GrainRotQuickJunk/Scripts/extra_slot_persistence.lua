@@ -271,6 +271,7 @@ function M:resetWorld()
     self.pending=nil;self.pendingKind=nil;self.pendingTicks=0
     self.restoreAttempts={};self.spawned={};self.lastSaved=nil
     self.emptyStreak=0
+    self.lastPawnRef=nil;self.lastSave=nil
 end
 
 function M:fileFor(slot)
@@ -310,6 +311,27 @@ function M:writeManifest(slot,saveName,played,rows)
     self.lastSaved=payload
     return true,"written"
 end
+-- Match the manifest to the real game's successful SaveGame lifecycle.
+-- When the user removes the last item and saves immediately, this overrides
+-- any older periodic snapshot so a consumed item is not resurrected.
+function M:checkpoint()
+    local pawn,save=self.lastPawnRef,self.lastSave
+    if self.pending or not isAlive(pawn) or not valid(save) then
+        return false,"recovery_or_dead"
+    end
+    local md=get(save,"MetaData")
+    local slot=tonumber(get(md,"GameSlot"))
+    local saveName=sval(get(md,"SaveSlotName")) or ""
+    local played=tonumber(get(save,"TimePlayed")) or 0
+    if not slot or self.scope~=tostring(slot)..":"..saveName then
+        return false,"wrong_save_scope"
+    end
+    local rows=snapshot(pawn)
+    local ok,why=self:writeManifest(slot,saveName,played,rows)
+    if ok then self.lastRows=rows;self.emptyStreak=0 end
+    return ok,why
+end
+
 function M:tick(pc,pawn,save,world)
     if not valid(pc) or not valid(pawn) or not valid(save) or not valid(world) then
         return false,"no_host_save_context"
@@ -334,6 +356,8 @@ function M:tick(pc,pawn,save,world)
         end
     end
     self.ticks=self.ticks+1
+    self.lastSave=save
+    self.lastPawnRef=pawn
     if not isAlive(pawn) then return true,"dead_paused" end
     local pawnId=name(pawn)
     if self.lastPawn and self.lastPawn~=pawnId and #self.lastRows>0 then
