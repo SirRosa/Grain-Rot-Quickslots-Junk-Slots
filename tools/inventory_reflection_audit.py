@@ -171,3 +171,11 @@ for line in txt.splitlines():
     if "Function /Script/Helden." in line and any(q in line for q in (
         "HeldenConstructAsset:","HeldenIconGenerator:","HeldenPhysTreasure",
         "HeldenItemDataAsset:")): print("ICON FUNC",line[:270])
+
+print("\nICON ASSET CANDIDATE TYPES")
+for key,v in data["structs"].items():
+    if key.startswith("Helden") and (
+        "ItemAsset" in key or "IconGenerator" in key or
+        ("Money" in key and "Widget" not in key) or "Resource" in key):
+        if "Icon" in str(v) or "ItemAsset" in key:
+            print("ITEM TYPE",key,json.dumps(v,ensure_ascii=False)[:8500])
