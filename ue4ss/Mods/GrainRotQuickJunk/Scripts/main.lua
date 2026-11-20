@@ -1,8 +1,7 @@
--- Grain Rot Quickslots & Junk Slots, v0.2.4-visibility-perf.
+-- Grain Rot unified physics quickslots 1-0, v0.3.0-unified.
 -- UE4SS 3.x, Helden UE 5.7. Source-driven research build.
--- EXPERIMENTAL: host-only actor storage mutates physics/visibility and native
--- slot creation may be incompatible with current game saves. Back up saves.
--- No actor is destroyed or cloned by this mod. Save/travel unverified.
+-- EXPERIMENTAL: host-only native RMB physics grabbing; back up saves.
+-- No direct mutation of physics handles, PhysGrabData or native item arrays.
 local CFG = {
     ElevatorRefill = true,
     PollMillis = 500,
@@ -102,20 +101,20 @@ local function refillGun(gun)
     log("REFILL unconfirmed (readback mismatch): "..full(gun))
     return false
 end
-local session={inside={},world=nil,probedWorld=nil,junkIndex=1,probEvents=0,
-    overlapError=false, cachedContexts=nil, cachedElevators={},
-    quickUiReady={}, hudReady=false}
-local hasStore,storeModule=pcall(require,"junk_store")
-if hasStore and type(storeModule)=="table" and type(storeModule.new)=="function" then
-    session.bank=storeModule.new(10)
+local session={inside={},world=nil,probedWorld=nil,probEvents=0,
+    overlapError=false,cachedContexts=nil,cachedElevators={},
+    quickUiReady={},physicsUiReady=false}
+local hasPhysics,physicsModule=pcall(require,"physics_quickslots")
+if hasPhysics and type(physicsModule)=="table" then
+    session.physics=physicsModule.new(log)
 else
-    log("ERROR: Junk transaction module failed to load: "..tostring(storeModule))
+    log("ERROR: unified physics quickslots unavailable "..tostring(physicsModule))
 end
-local hasActors,actorsModule=pcall(require,"actor_storage")
-if hasActors and session.bank and type(actorsModule)=="table" then
-    session.storage=actorsModule.new(session.bank,log)
+local hasPhysicsSave,physicsSaveModule=pcall(require,"physics_quickslot_save")
+if hasPhysicsSave and type(physicsSaveModule)=="table" and session.physics then
+    session.physicsSave=physicsSaveModule.new(log,session.physics)
 else
-    log("ERROR: actor storage unavailable: "..tostring(actorsModule))
+    log("ERROR: physics quickslot save module unavailable "..tostring(physicsSaveModule))
 end
 local hasNative,nativeModule=pcall(require,"native_slots")
 if hasNative and type(nativeModule)=="table" then
@@ -124,19 +123,6 @@ if hasNative and type(nativeModule)=="table" then
     session.nativeAttempts={}
 else
     log("ERROR: native inventory extension unavailable: "..tostring(nativeModule))
-end
-local hasHud,hudModule=pcall(require,"junk_hud")
-if hasHud and type(hudModule)=="table" then
-    session.hud=hudModule
-else
-    log("ERROR: game-native Junk HUD unavailable: "..tostring(hudModule))
-end
-local hasInput,inputModule=pcall(require,"input_bridge")
-if hasInput and type(inputModule)=="table" then
-    session.input=inputModule
-    session.input.setLogger(log)
-else
-    log("ERROR: native inventory input calibration unavailable: "..tostring(inputModule))
 end
 local hasQuickUI,quickUIModule=pcall(require,"quickbar_ui")
 if hasQuickUI and type(quickUIModule)=="table" then
@@ -185,8 +171,9 @@ if type(RegisterHook)=="function" then
         local ok,err=pcall(function()
             RegisterHook(spec.path,function()
                 ensureDefaultSlots(spec.tag)
-                if spec.tag~="Respawn" and session.persist then
-                    session.persist:resetWorld()
+                if spec.tag~="Respawn" then
+                    if session.persist then session.persist:resetWorld() end
+                    if session.physicsSave then session.physicsSave:resetWorld() end
                 end
             end)
         end)
@@ -201,17 +188,25 @@ else
     log("ERROR: durable slot 5-10 backup unavailable: "..tostring(persistModule))
 end
 session.persistSave=nil
-if session.persist and type(RegisterHook)=="function" then
+if (session.persist or session.physicsSave) and type(RegisterHook)=="function" then
     local ok,err=pcall(function()
         RegisterHook("/Script/Helden.HeldenGameInstance:OnAsyncSaveComplete",
             function() end,function()
-                local success,reason=session.persist:checkpoint()
-                if success and reason=="written" then
-                    log("[PERSIST] saved six-slot manifest on native OnAsyncSaveComplete")
+                if session.persist then
+                    local success,reason=session.persist:checkpoint()
+                    if success and reason=="written" then
+                        log("[PERSIST] native gear slots 5-10 checkpointed")
+                    end
+                end
+                if session.physicsSave and valid(session.persistSave) then
+                    local success,reason=session.physicsSave:checkpoint(session.persistSave)
+                    if success and reason=="written" then
+                        log("[PHYS SAVE] shared quickslots 1-0 checkpointed")
+                    end
                 end
             end)
     end)
-    if not ok then log("[PERSIST] native save-complete hook unavailable "..tostring(err)) end
+    if not ok then log("[PERSIST] save-complete hook unavailable "..tostring(err)) end
 end
 
 session.pollCount=0
@@ -305,10 +300,6 @@ local function poll()
                 local world=record.world or worldOf(pawn)
                 if world then
                     if session.world~=world then
-                        if session.bank and session.bank:count()>0 then
-                            log("WARNING: world changed with "..session.bank:count()..
-                                " junk actors; check save/old actors before continuing")
-                        end
                         session.world=world
                         session.inside={}
                         session.probedWorld=nil
@@ -316,28 +307,17 @@ local function poll()
                         session.nativeAttempts={}
                         session.persistSave=nil
                         if session.persist then session.persist:resetWorld() end
+                        if session.physicsSave then session.physicsSave:resetWorld() end
+                        if session.physics then session.physics:resetWorld() end
                         session.quickUiReady={}
-                        session.hudReady=false
+                        session.physicsUiReady=false
                         if session.visibility then session.visibility.reset() end
-                        if session.hud then session.hud.reset() end
                         if session.quickUI then session.quickUI.reset() end
                         session.quickUiStatus={}
-                        if session.input then session.input.reset() end
                     end
                     local isLocal=(record.pc and record.isLocal) or false
                     if not record.pc then
                         pcall(function() isLocal=pc:IsLocalController()==true end)
-                    end
-                    if session.hud and isLocal and not session.hudReady and deepPoll then
-                        local shown,why=session.hud.ensure(pc,log)
-                        session.hudReady=shown==true
-                        if shown and session.bank then
-                            session.hud.update(session.bank.selected)
-                        end
-                        if not shown and why=="max_attempts" and not session.hudWarned then
-                            session.hudWarned=true
-                            log("JUNK HUD failed to construct; native widget path unavailable")
-                        end
                     end
                     if CFG.LogInventoryProbes and session.probedWorld~=world then
                         session.probedWorld=world
@@ -355,14 +335,21 @@ local function poll()
                         or (not session.context and hostFor(world) or nil)
                     if host then
                         local key=full(pawn)
-                        -- Store only AFTER Grain Rot itself releases RMB.
-                        -- Never call ReleaseComponent, clear PhysGrabData.Target,
-                        -- or attach a grabbed actor (native Fatal Error on v0.2.1).
-                        -- Native SaveGame.ItemSaveData is the primary durable
-                        -- source. The companion file backs up *only* the six
-                        -- extra slots, matched by save slot / DynamicSaveName.
-                        -- No backup/restore on clients; host is authoritative.
-                        if session.persist and isLocal and deepPoll then
+                        -- Native physics storage is E while currently holding
+                        -- a HeldenPhysicsActor via RMB. The server RPC itself
+                        -- releases the grab before visibility/physics change.
+                        if session.physics then
+                            local done,status=session.physics:tick(pawn)
+                            if session.physics.pending and status~="native_release_pending"
+                                and status~="confirming_native_release"
+                                and status~="confirming_native_grab" then
+                                log("[PHYS] pending="..tostring(status))
+                            end
+                        end
+                        -- The equipment save remains separate from virtual
+                        -- physics reservations, preventing any overwrite of
+                        -- native HeldenSaveGame.ItemSaveData.
+                        if isLocal and deepPoll then
                             if not valid(session.persistSave) then
                                 local gi
                                 if type(FindFirstOf)=="function" then
@@ -377,20 +364,18 @@ local function poll()
                             if valid(session.persistSave) then
                                 local worldObj
                                 pcall(function() worldObj=pawn:GetWorld() end)
-                                local done,status=session.persist:tick(pc,pawn,
-                                    session.persistSave,worldObj)
-                                if not done and session.persistStatus~=status then
-                                    session.persistStatus=status
-                                    log("[PERSIST] context="..tostring(status))
+                                if session.persist then
+                                    local ok,status=session.persist:tick(pc,pawn,
+                                        session.persistSave,worldObj)
+                                    if not ok and session.persistStatus~=status then
+                                        session.persistStatus=status
+                                        log("[PERSIST] context="..tostring(status))
+                                    end
                                 end
-                            end
-                        end
-                        if session.storage and session.storage.pending then
-                            local done,result=session.storage:tick(pawn)
-                            if done or (result~="awaiting_rmb_release" and
-                                    result~="confirming_release" and result~="idle") then
-                                log("JUNK pending completion="..tostring(done)..
-                                    " result="..tostring(result))
+                                if session.physicsSave and session.physics and
+                                    session.pollCount%8==0 then
+                                    session.physicsSave:poll(pawn,session.persistSave)
+                                end
                             end
                         end
                         -- One bounded attempt per real player to create six native
@@ -432,10 +417,12 @@ local function poll()
                                 end
                             end
                         end
-                        if session.storage and session.bank and session.bank:count()>0 then
-                            local state=get(pawn,"CharacterState")
-                            if tonumber(state)==1 or tostring(state):find("Dead",1,true) then
-                                session.storage:recoverAll(pawn,"player_death")
+                        if session.physics and isLocal and deepPoll then
+                            if session.pollCount%20==0 and session.physics:count()>0 then
+                                session.physics:resolveNativeConflicts(pawn)
+                            end
+                            if session.physics.changed or session.pollCount%8==0 then
+                                session.physics:refreshUI(pc)
                             end
                         end
                         if deepPoll then
@@ -500,53 +487,34 @@ local function localQuickController()
 end
 
 local function onInput(action,source)
-    if action=="junk_prev" then
-        if session.bank then
-            session.bank:cycle(-1)
-            session.junkIndex=session.bank.selected
-        else
-            session.junkIndex=(session.junkIndex+8)%10+1
+    if action=="store_physics" then
+        local pc,pawn,why=localQuickController()
+        if not pc or not pawn then
+            log("[PHYS] E ignored, player missing: "..tostring(why))
+            return
         end
-        if session.hud then session.hud.update(session.junkIndex) end
-        log("JUNK selected "..session.junkIndex.."/10")
-    elseif action=="junk_next" then
-        if session.bank then
-            session.bank:cycle(1)
-            session.junkIndex=session.bank.selected
-        else
-            session.junkIndex=session.junkIndex%10+1
+        local world=worldOf(pawn)
+        if not world or not hostFor(world) then
+            log("[PHYS] E ignored: physics storage requires authoritative host")
+            return
         end
-        if session.hud then session.hud.update(session.junkIndex) end
-        log("JUNK selected "..session.junkIndex.."/10")
-    elseif action=="junk_put" then
-        local pawn=localPawn()
-        local grabbed=pawn and get(get(pawn,"PhysGrabData"),"Target")
-        local world=pawn and worldOf(pawn)
-        if not pawn or not world or not hostFor(world) then
-            log("JUNK "..source.." ERROR: authoritative pawn unavailable; "..
-                (session.context and session.context.diagnostic() or "legacy resolver"))
-        elseif not session.storage then
-            log("JUNK "..source.." ERROR: storage module missing")
-        else
-            local success,result=session.storage:store(pawn,grabbed)
-            log("JUNK "..source.." store="..tostring(success)..
-                " result="..tostring(result))
+        if not session.physics then
+            log("[PHYS] E ignored: physics module missing")
+            return
         end
-    elseif action=="junk_take" then
-        local pawn=localPawn()
-        local world=pawn and worldOf(pawn)
-        if not pawn or not world or not hostFor(world) then
-            log("JUNK "..source.." ERROR: authoritative pawn unavailable; "..
-                (session.context and session.context.diagnostic() or "legacy resolver"))
-        elseif not session.storage then
-            log("JUNK "..source.." ERROR: storage module missing")
-        else
-            local success,result=session.storage:retrieve(pawn)
-            log("JUNK "..source.." retrieve="..tostring(success)..
-                " result="..tostring(result))
+        local ok,result=session.physics:requestStore(pawn)
+        if not ok or result~="release_requested" then
+            log("[PHYS] E store="..tostring(ok).." reason="..tostring(result))
         end
-    elseif action:find("learn_",1,true)==1 then
-        if session.input then session.input.mark(tonumber(action:sub(7))) end
+    elseif action:find("native_select_",1,true)==1 then
+        local slot=tonumber(action:sub(15))
+        local pc,pawn=localQuickController()
+        if pc and pawn and session.physics and hostFor(worldOf(pawn)) then
+            local ok,why=session.physics:requestSelect(pawn,slot)
+            if not ok and why~="no_stored_physics_in_slot" then
+                log("[PHYS] select "..tostring(slot).." failed: "..tostring(why))
+            end
+        end
     elseif action:find("quick_",1,true)==1 then
         local slot=tonumber(action:sub(7))
         local pc,pawn,sourceName=localQuickController()
@@ -557,12 +525,17 @@ local function onInput(action,source)
             log("QUICK "..tostring(slot).." ERROR: native inventory bridge missing")
         else
             local success,why=session.native.select(pc,pawn,slot)
-            -- The game method accepts exactly one IntProperty InIdx.
-            -- Never swallow an unresolved controller or claim a slot switched
-            -- merely because RegisterKeyBind returned true.
-            log("QUICK "..tostring(slot).." controller="..full(pc)..
-                " pawn="..full(pawn).." source="..tostring(sourceName)..
-                " dispatched="..tostring(success).." reason="..tostring(why))
+            if not success then
+                log("QUICK "..tostring(slot).." ERROR: "..tostring(why))
+            elseif session.physics and hostFor(worldOf(pawn)) then
+                -- The RPC post-hook also sees the same key, but the
+                -- physics layer rejects duplicate pending transactions.
+                local ok,result=session.physics:requestSelect(pawn,slot)
+                if not ok and result~="no_stored_physics_in_slot" and
+                    result~="transaction_pending" then
+                    log("[PHYS] quick "..slot.." "..tostring(result))
+                end
+            end
         end
     end
 end
@@ -595,16 +568,35 @@ local function bind(keyName,action,requiresShift)
     if ok then log("BIND "..keyName.." => "..action)
     else log("BIND error "..keyName..": "..tostring(err)) end
 end
-bind("XBUTTON_ONE","junk_put")
-bind("XBUTTON_TWO","junk_take")
-bind("G","junk_put")
-bind("H","junk_take")
-bind("OEM_COMMA","junk_prev",true)
-bind("OEM_PERIOD","junk_next",true)
+-- E is only handled when PhysGrabData.Target is an actual RMB-grabbed
+-- HeldenPhysicsActor; if the player is not grabbing junk, do nothing.
+bind("E","store_physics")
 for n,keyName in ipairs({"ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE","ZERO"}) do
-    -- The exact game ObjectDump verifies InventoryAction_Server(InIdx:int).
-    -- Keys 1-4 are owned solely by the game; never intercept or double-bind.
+    -- Game keeps its native 1-4 hotkeys. 5-0 use our native RPC bridge.
     if n>=5 then bind(keyName,"quick_"..n) end
+end
+-- Native inventory action observes original 1-4 key selection too. Using
+-- a post-hook means the regular item has first been holstered by the game
+-- before a saved physics object is passed to GrabObject_Server.
+if session.physics and type(RegisterHook)=="function" then
+    local ok,err=pcall(function()
+        RegisterHook("/Script/Helden.HeldenPlayerController:InventoryAction_Server",
+            function() end,function(context,inIdx)
+                if session.physics:count()==0 then return end
+                local function unwrap(a)
+                    local ok,value=pcall(function() return a:get() end)
+                    return ok and value or a
+                end
+                local controller=unwrap(context)
+                local idx=tonumber(unwrap(inIdx))
+                if not valid(controller) or not idx or idx<0 or idx>9 then return end
+                local localPc=localQuickController()
+                if not localPc or full(localPc)~=full(controller) then return end
+                queueInput("native_select_"..(idx+1),"native_inventory_post")
+            end)
+    end)
+    if ok then log("[PHYS] native slot 1-0 selection post-hook active")
+    else log("[PHYS] native selection post-hook unavailable: "..tostring(err)) end
 end
 -- Read-only prehook: collect actual signature of key native inventory action.
 local function probeHook(path,label)
@@ -654,4 +646,4 @@ else
     if ok then log("fallback sampled animation heartbeat active")
     else log("NO POLLER: "..tostring(err)) end
 end
-log("v0.2.5-compat-persistence: Blueprint CDO pre-spawn + host native-item identity recovery and per-save-slot backup.")
+log("v0.3.0-unified: E stows RMB physics into first free native quickslot 1-0; slot selection uses GrabObject_Server.")
