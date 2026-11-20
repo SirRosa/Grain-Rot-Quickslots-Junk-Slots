@@ -3,7 +3,8 @@ package.path="ue4ss/Mods/GrainRotQuickJunk/Scripts/?.lua;"..package.path
 local messages, binds, hooks = {}, {}, {}
 local poller
 print=function(s) messages[#messages+1]=tostring(s) end
-Key={XBUTTON_ONE=5,XBUTTON_TWO=6,G=71,H=72,OEM_COMMA=188,OEM_PERIOD=190,
+Key={XBUTTON_ONE=5,XBUTTON_TWO=6,G=71,H=72,E=69,
+    OEM_COMMA=188,OEM_PERIOD=190,
     ONE=49,TWO=50,THREE=51,FOUR=52,FIVE=53,SIX=54,SEVEN=55,
     EIGHT=56,NINE=57,ZERO=48}
 ModifierKey={SHIFT=16}
@@ -12,7 +13,7 @@ RegisterKeyBind=function(k,mods,cb)
     else cb=mods end
     assert(not binds[k],"duplicate bind"); binds[k]=cb
 end
-RegisterHook=function(k,cb) hooks[k]=cb;return 1,2 end
+RegisterHook=function(k,pre,post) hooks[k]={pre=pre,post=post};return 1,2 end
 ExecuteInGameThread=function(cb) cb() end
 LoopInGameThreadWithDelay=function(ms,cb) assert(ms==500);poller=cb end
 
@@ -63,12 +64,16 @@ groups.HeldenInventoryWidget={}
 assert(loadfile("ue4ss/Mods/GrainRotQuickJunk/Scripts/main.lua"))()
 assert(type(poller)=="function","poller not registered")
 local function pollN(n) for _=1,n do poller() end end
-for _,k in ipairs({5,6,71,72,188,190,53,54,55,56,57,48}) do
+for _,k in ipairs({69,53,54,55,56,57,48}) do
     assert(type(binds[k])=="function","missing keybind "..k)
 end
-for _,k in ipairs({49,50,51,52}) do
-    assert(binds[k]==nil,"native 1-4 keys must not be intercepted")
+for _,k in ipairs({5,6,71,72,188,190,49,50,51,52}) do
+    assert(binds[k]==nil,
+        "old Junk controls or native 1-4 keys must not be rebound: "..k)
 end
+assert(hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"]
+    and type(hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"].post)=="function",
+    "native selection post-hook must track game-owned keys 1-4")
 poller()
 assert(gun.ItemDurability==3,"must not repair outside lift")
 assert(gun2.ItemDurability==1,"world gun must not be repaired")
@@ -98,15 +103,11 @@ local newElev=(findCounts.HeldenDungeonElevator or 0)-oldElev
 assert(newCount<=7 and newElev<=7,
     "repeated full scans in poll loop would cause stutter")
 local before=gun2.ItemDurability
-binds[5]()
-binds[71]()
-binds[6]()
-binds[72]()
-binds[188]()
-binds[190]()
-binds[48]()
-assert(gun2.ItemDurability==before and gun2.alive,"preview must not mutate grabbed world item")
-assert(pawn.PhysGrabData.Target==gun2,"grabbed object must remain unchanged")
+-- Pressing E while RMB holds a non-physics object must fail closed.
+binds[69]()
+assert(gun2.ItemDurability==before and gun2.alive,
+    "E on nonphysics actor must not destroy or mutate it")
+assert(pawn.PhysGrabData.Target==gun2,"invalid E must leave RMB grab intact")
 -- LIVE regression from UE4SS(6).log: GetPawn() is nil, but
 -- LastPlayerChar is the valid character whose slots reach 10.
 -- The game accepts a reflected InventoryAction_Server(InIdx:int).
@@ -118,16 +119,14 @@ for _,entry in ipairs(bindings) do
         "pressing number key must dispatch the correct zero-based inventory slot")
 end
 assert(pc.rpcCalls==6,"all six new hotkeys must trigger server inventory RPC")
-assert(hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"]==nil,
-    "release build must not install unused hotkey monitoring hooks")
-local sawRefill,sawStoreResult=false,false
-for _,s in ipairs(messages) do
-    if s:find("REFILL",1,true) then sawRefill=true end
-    if s:find("JUNK",1,true) and (s:find("ERROR",1,true) or s:find("result=",1,true)) then sawStoreResult=true end
+assert(hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"]~=nil,
+    "1-4 selection must be detected without double-binding the native keys")
+local sawRefill,sawBlocked=false,false
+for _,msg in ipairs(messages) do
+    if msg:find("REFILL",1,true) then sawRefill=true end
+    if msg:find("[PHYS] E store=false",1,true) then sawBlocked=true end
 end
-assert(sawRefill and sawStoreResult,"diagnostic must report the store outcome clearly")
-for _,s in ipairs(messages) do
-    assert(not s:find("Junk transaction module failed",1,true),"junk model must load")
-end
+assert(sawRefill and sawBlocked,
+    "E should report rejected nonphysics item and not touch native gun")
 print=io.write
-print("PASS: true 5-0 input, cached controller/elevator discovery and 2s refill interval\n")
+print("PASS: E replaces M4/M5/G/H, game-native 1-4 selection observed, 5-0 input preserved and cached scans\n")
