@@ -1,4 +1,4 @@
--- Grain Rot unified physics quickslots 1-0, v0.3.0-unified.
+-- Grain Rot unified physics quickslots 1-0, v0.3.1-hotbar-icons.
 -- UE4SS 3.x, Helden UE 5.7. Source-driven research build.
 -- EXPERIMENTAL: host-only native RMB physics grabbing; back up saves.
 -- No direct mutation of physics handles, PhysGrabData or native item arrays.
