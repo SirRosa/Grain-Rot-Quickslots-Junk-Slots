@@ -60,19 +60,27 @@ local function itemTexture(actor)
     -- Furniture/construct objects expose ready-to-use game-generated icons.
     -- SetupConstructAsset and InitConAsset are reflected on physics actors.
     local candidates={
-        get(actor,"InitConAsset"),get(actor,"SetupConstructAsset"),
-        get(actor,"SettingsAsset"),get(actor,"SourceObject"),actor,
+        "InitConAsset","SetupConstructAsset","SettingsAsset","SourceObject"
     }
-    for _,asset in ipairs(candidates) do
-        if valid(asset) then
-            local tex=get(asset,"Icon")
-            if valid(tex) then return tex,"construct_icon" end
-            -- Some items carry their icon in an owned data asset.
-            local embedded=get(asset,"ItemDataAsset") or get(asset,"InitConAsset")
-            if valid(embedded) and valid(get(embedded,"Icon")) then
-                return get(embedded,"Icon"),"item_icon"
-            end
+    local function tryAsset(asset)
+        if not valid(asset) then return nil end
+        local tex=get(asset,"Icon")
+        if valid(tex) then return tex,"construct_icon" end
+        local embedded=get(asset,"ItemDataAsset") or get(asset,"InitConAsset")
+        if valid(embedded) and valid(get(embedded,"Icon")) then
+            return get(embedded,"Icon"),"item_icon"
         end
+        return nil
+    end
+    for _,field in ipairs(candidates) do
+        local asset=get(actor,field)
+        local tex,kind=tryAsset(asset)
+        if tex then return tex,kind end
+    end
+    local asset=actor
+    do
+        local tex,kind=tryAsset(asset)
+        if tex then return tex,kind end
     end
     return nil
 end
