@@ -451,10 +451,9 @@ bind("H","junk_take")
 bind("OEM_COMMA","junk_prev",true)
 bind("OEM_PERIOD","junk_next",true)
 for n,keyName in ipairs({"ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE","ZERO"}) do
-    -- Keybinds 1-4 only mark baseline samples; they NEVER issue any
-    -- game command. The game's own original input handling stays primary.
-    if n<5 then bind(keyName,"learn_"..n)
-    else bind(keyName,"quick_"..n) end
+    -- The exact game ObjectDump verifies InventoryAction_Server(InIdx:int).
+    -- Keys 1-4 are owned solely by the game; never intercept or double-bind.
+    if n>=5 then bind(keyName,"quick_"..n) end
 end
 -- Read-only prehook: collect actual signature of key native inventory action.
 local function probeHook(path,label)
