@@ -26,3 +26,16 @@ txt=gzip.decompress(parts).decode('utf-8',errors='replace')
 keys=('HeldenInputIconWidget','WBP_InventorySlot_C','HeldenPlayerController.InventoryAction','HeldenCharacter.Grab','HeldenCharacter.Drop','HeldenCharacter.Release','HeldenCharacter.Holster','HeldenInventorySlotWidget','HeldenInventoryWidget')
 results=[line for line in txt.splitlines() if any(k.lower() in line.lower() for k in keys)]
 for line in results[:160]: print(line[:300])
+
+print("\nNATIVE ACTION METHODS / EXACT UFUNCTION PROPERTIES")
+import re
+patterns=("inventory","slot","equip","holster","grab","drop","throw","pickup","switch","select","release")
+prefixes=("/Script/Helden.HeldenCharacter:", "/Script/Helden.HeldenPlayerController:",
+          "/Script/Helden.HeldenInventorySlotWidget:", "/Script/Helden.HeldenInputIconWidget:")
+for line in txt.splitlines():
+    if line.startswith("[") and "Function " in line and any(p in line for p in prefixes):
+        target=line.lower()
+        if any(p in target for p in patterns): print(line[:300])
+    elif line.startswith("[") and "Property " in line and any(p in line for p in prefixes):
+        target=line.lower()
+        if any(p in target for p in patterns): print(line[:300])
