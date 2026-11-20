@@ -94,6 +94,15 @@ all={}
 pawn.EquipedItems={}
 for _=1,5 do saver4:poll(pawn,save) end
 assert(quick4:count()==0 and #saver4.unresolved==1)
+assert(quick4.unresolvedSlots[7],
+    "missing physical actor must reserve its old slot after reload")
+local canSelect,why=quick4:requestSelect(pawn,7)
+assert(not canSelect and why=="saved_physics_actor_not_loaded")
+for i=1,6 do quick4.slots[i]={slot=i} end
+local available=quick4:firstFree(pawn)
+assert(available==8,
+    "E must not silently overwrite the old missing slot 7")
+for i=1,6 do quick4.slots[i]=nil end
 local completed,res=saver4:checkpoint(save)
 assert(completed)
 local handle2=assert(io.open(f,"rb"))
