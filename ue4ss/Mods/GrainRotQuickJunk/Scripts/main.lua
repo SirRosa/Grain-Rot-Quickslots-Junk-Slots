@@ -191,6 +191,14 @@ if type(RegisterHook)=="function" then
     end
 end
 
+local hasPersist,persistModule=pcall(require,"extra_slot_persistence")
+if hasPersist and type(persistModule)=="table" then
+    session.persist=persistModule.new(log)
+else
+    log("ERROR: durable slot 5-10 backup unavailable: "..tostring(persistModule))
+end
+session.persistSave=nil
+
 session.pollCount=0
 local function hostFor(world)
     if session.context then
@@ -291,6 +299,8 @@ local function poll()
                         session.probedWorld=nil
                         session.overlapError=false
                         session.nativeAttempts={}
+                        session.persistSave=nil
+                        if session.persist then session.persist:resetWorld() end
                         session.quickUiReady={}
                         session.hudReady=false
                         if session.visibility then session.visibility.reset() end
@@ -333,6 +343,33 @@ local function poll()
                         -- Store only AFTER Grain Rot itself releases RMB.
                         -- Never call ReleaseComponent, clear PhysGrabData.Target,
                         -- or attach a grabbed actor (native Fatal Error on v0.2.1).
+                        -- Native SaveGame.ItemSaveData is the primary durable
+                        -- source. The companion file backs up *only* the six
+                        -- extra slots, matched by save slot / DynamicSaveName.
+                        -- No backup/restore on clients; host is authoritative.
+                        if session.persist and isLocal and deepPoll then
+                            if not valid(session.persistSave) then
+                                local gi
+                                if type(FindFirstOf)=="function" then
+                                    local ok,v=pcall(FindFirstOf,"HeldenGameInstance")
+                                    if ok and valid(v) then gi=v end
+                                end
+                                if not valid(gi) then
+                                    gi=all("HeldenGameInstance")[1]
+                                end
+                                session.persistSave=get(gi,"CurrentSaveGame")
+                            end
+                            if valid(session.persistSave) then
+                                local worldObj
+                                pcall(function() worldObj=pawn:GetWorld() end)
+                                local done,status=session.persist:tick(pc,pawn,
+                                    session.persistSave,worldObj)
+                                if not done and session.persistStatus~=status then
+                                    session.persistStatus=status
+                                    log("[PERSIST] context="..tostring(status))
+                                end
+                            end
+                        end
                         if session.storage and session.storage.pending then
                             local done,result=session.storage:tick(pawn)
                             if done or (result~="awaiting_rmb_release" and
@@ -602,4 +639,4 @@ else
     if ok then log("fallback sampled animation heartbeat active")
     else log("NO POLLER: "..tostring(err)) end
 end
-log("v0.2.5-compat-prespawn: configure Blueprint CDO before LoadGame/Respawn, restoring stable native quickslot names.")
+log("v0.2.5-compat-persistence: Blueprint CDO pre-spawn + host native-item identity recovery and per-save-slot backup.")
