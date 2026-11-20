@@ -104,3 +104,10 @@ for idx,line in enumerate(lines):
 for key in ("HeldenPhysGrabData","HeldenPhysicsActor","EHeldenPhysGrabState","EHeldenCharacterControllerState"):
     item=data["structs"].get(key) or data["enums"].get(key)
     print("TYPE",key,json.dumps(item,ensure_ascii=False)[:17000])
+
+print("\nGRAB STRUCT EXACT MATERIALIZATION AND HUD WIDGET FIELDS")
+for key in ("HeldenNetworkTimer","Vector_NetQuantize","Vector_NetQuantizeNormal",
+            "HeldenInventorySlotWidget","HeldenInventoryWidget","HeldenInputIconWidget",
+            "HeldenPhysicsActor","HeldenActorSaveData"):
+    v=data["structs"].get(key)
+    if v: print("STRUCT",key,json.dumps(v,ensure_ascii=False)[:11000])
