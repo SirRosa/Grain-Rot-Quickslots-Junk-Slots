@@ -174,6 +174,8 @@ if type(RegisterHook)=="function" then
                 if spec.tag~="Respawn" then
                     if session.persist then session.persist:resetWorld() end
                     if session.physicsSave then session.physicsSave:resetWorld() end
+                    if session.physics then session.physics:resetWorld() end
+                    session.persistSave=nil
                 end
             end)
         end)
