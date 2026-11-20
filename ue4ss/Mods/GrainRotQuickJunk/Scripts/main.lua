@@ -185,6 +185,9 @@ if type(RegisterHook)=="function" then
         local ok,err=pcall(function()
             RegisterHook(spec.path,function()
                 ensureDefaultSlots(spec.tag)
+                if spec.tag~="Respawn" and session.persist then
+                    session.persist:resetWorld()
+                end
             end)
         end)
         if not ok then log("PRESPAWN hook unavailable: "..spec.tag.." "..tostring(err)) end
@@ -198,6 +201,18 @@ else
     log("ERROR: durable slot 5-10 backup unavailable: "..tostring(persistModule))
 end
 session.persistSave=nil
+if session.persist and type(RegisterHook)=="function" then
+    local ok,err=pcall(function()
+        RegisterHook("/Script/Helden.HeldenGameInstance:OnAsyncSaveComplete",
+            function() end,function()
+                local success,reason=session.persist:checkpoint()
+                if success and reason=="written" then
+                    log("[PERSIST] saved six-slot manifest on native OnAsyncSaveComplete")
+                end
+            end)
+    end)
+    if not ok then log("[PERSIST] native save-complete hook unavailable "..tostring(err)) end
+end
 
 session.pollCount=0
 local function hostFor(world)
