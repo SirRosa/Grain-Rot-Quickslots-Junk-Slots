@@ -24,9 +24,9 @@ jobs:
         run: |
           mkdir -p dist
           cd ue4ss/Mods
-          zip -qr ../../dist/GrainRotQuickJunk-v0.2.5-compat-persistence.zip GrainRotQuickJunk
+          zip -qr ../../dist/GrainRotQuickJunk-v0.3.0-unified-physics.zip GrainRotQuickJunk
       - uses: actions/upload-artifact@v4
         with:
-          name: GrainRotQuickJunk-v0.2.5-compat-persistence
-          path: dist/GrainRotQuickJunk-v0.2.5-compat-persistence.zip
+          name: GrainRotQuickJunk-v0.3.0-unified-physics
+          path: dist/GrainRotQuickJunk-v0.3.0-unified-physics.zip
           if-no-files-found: error
