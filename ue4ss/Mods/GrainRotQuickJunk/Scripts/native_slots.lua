@@ -36,11 +36,40 @@ local function warn(s)
     state.log("[QUICK] "..s)
 end
 local function makeName(i)
-    if type(FName)=="function" then
-        local ok,v=pcall(FName,"GrainRotQuick"..i)
-        if ok then return v end
+    local name="GrainRotQuick"..i
+    -- UE4SS v3 FName() uses Find by default, so new names may resolve
+    -- to None. The native Kismet conversion adds them to the UE name pool.
+    if type(StaticFindObject)~="function" then return nil end
+    local ok,lib=pcall(StaticFindObject,"/Script/Engine.Default__KismetStringLibrary")
+    if not ok or not valid(lib) then return nil end
+    local fine,value=pcall(function() return lib:Conv_StringToName(name) end)
+    if fine and value and enumString(value)==name then return value end
+    return nil
+end
+local function makeTemplate(src)
+    local socket=enumString(get(src,"Socket"))
+    local t=get(src,"RelativeTransform")
+    local q=get(t,"Rotation")
+    local p=get(t,"Translation")
+    local s=get(t,"Scale3D")
+    if not socket or not q or not p or not s or type(FName)~="function" then return nil end
+    local ok,socketName=pcall(FName,socket)
+    if not ok or not socketName or enumString(socketName)~=socket then return nil end
+    local function vec3(v)
+        local x,y,z=tonumber(get(v,"X")),tonumber(get(v,"Y")),tonumber(get(v,"Z"))
+        if not x or not y or not z then return nil end
+        return {X=x,Y=y,Z=z}
     end
-    return "GrainRotQuick"..i
+    local quat=vec3(q)
+    local pos=vec3(p)
+    local scale=vec3(s)
+    local w=tonumber(get(q,"W"))
+    if not quat or not pos or not scale or not w then return nil end
+    quat.W=w
+    return {
+        Socket=socketName,
+        RelativeTransform={Rotation=quat,Translation=pos,Scale3D=scale},
+    }
 end
 function M.extend(pawn)
     if not valid(pawn) then return false,"pawn_invalid" end
@@ -70,39 +99,36 @@ function M.extend(pawn)
     local existing=get(settings,4)
     if not existing then return false,"no_template" end
     local originalName=enumString(get(existing,"SlotName"))
-    local first=5
-    local ok,err=pcall(function() settings[first]=existing end)
-    local n=arrayLen(settings)
-    if not ok or not n or n<first then
-        state.blocked[key]=true
-        warn("TArray append unsupported, no further writes: "..tostring(err))
-        return false,"append_unsupported"
+    local data=makeTemplate(existing)
+    if not data or not originalName then
+        return false,"cannot_snapshot_struct_before_append"
     end
-    -- An append succeeded, so materialize the remaining five slots.
+    local entries={}
     for i=5,10 do
-        if i>5 then
-            local good,errorString=pcall(function() settings[i]=existing end)
-            if not good then
-                state.blocked[key]=true
-                warn("append stopped at "..i..": "..tostring(errorString))
-                return false,"partial_native_config"
-            end
+        local label=makeName(i)
+        if not label then return false,"cannot_create_native_slot_name_"..i end
+        entries[i]={SlotName=label,Socket=data.Socket,RelativeTransform=data.RelativeTransform}
+    end
+    -- Never keep a reference into the old FScriptArray after an append:
+    -- reallocation invalidates UScriptStruct userdata addresses.
+    for i=5,10 do
+        local ok,err=pcall(function() settings[i]=entries[i] end)
+        local n=arrayLen(settings)
+        if not ok or not n or n<i then
+            state.blocked[key]=true
+            warn("TArray append stopped at "..i.." (n="..tostring(n).."): "..tostring(err))
+            return false,"native_append_not_supported"
         end
         local entry=get(settings,i)
-        if not entry then
+        if not entry or enumString(get(entry,"SlotName"))~="GrainRotQuick"..i then
             state.blocked[key]=true
-            return false,"missing_appended_entry"
-        end
-        local renamed=pcall(function() entry.SlotName=makeName(i) end)
-        if not renamed then
-            state.blocked[key]=true
-            warn("renaming native settings failed at "..i)
-            return false,"slot_name_write_failed"
+            warn("native SlotSetting readback mismatch at "..i)
+            return false,"slot_readback_mismatch"
         end
     end
     if arrayLen(settings)~=10 or originalName~=enumString(get(get(settings,4),"SlotName")) then
         state.blocked[key]=true
-        warn("layout verification FAILED; restore the backed-up save if it causes problems")
+        warn("layout verification failed, do not continue")
         return false,"layout_verification_failed"
     end
     state.seen[key]="complete"
