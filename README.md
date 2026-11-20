@@ -1,35 +1,41 @@
-# Grain Rot — Quickslots & Junk Slots
+# Grain Rot — Quickslots / Junk Slots
 
-UE4SS Lua mod for **Grain Rot / Helden**. Active development, **v0.1.0-alpha**.
+**v0.2.0-experimental** — kod faktycznie próbuje zmieniać ekwipunek, chować przedmioty i renderować slot HUD. **To nadal nie jest potwierdzony w grze, bezpieczny finalny mod.**
 
-## Requested target
+## Funkcje
 
-| Feature | Goal | Current implementation |
-|---|---|---|
-| Quickslots | 4 → 10; keys `1`–`9`, `0` | Native `1`–`4` untouched; `5`–`0` diagnostics only, not extra inventory |
-| Junk Slots | 10 hidden item slots | Transaction/rollback model for 10 item identities; no transfer yet |
-| Store / retrieve | Mouse4/G and Mouse5/H, while carrying object with RMB | Buttons active for read-only grab detection; no objects moved/destroyed |
-| Junk selection | `<` and `>` | Shift+comma / Shift+period cycle 1–10, logged, not HUD |
-| Junk HUD | One genuine inventory slot at bottom-right | Game's UMG slot widget identified; not created yet |
-| Firearms | Refill ammunition/durability at elevator entry | Experimental host-only implementation, pending actual game test |
+| Funkcja | Obecny stan |
+|---|---|
+| 10 Quickslotów (`1–0`) | Próba rozszerzenia `InventorySettings.SlotSettings` z 4 do 10 i stworzenia brakujących `HeldenInventorySlotComponent` / `ItemSlots`. Gra musi zaakceptować nową konfigurację; graficzne dodanie sześciu elementów paska NIE jest jeszcze potwierdzone. |
+| Klawisze `5–0` | Najpierw korzystają z natywnego `InventoryAction_Server` tylko jeśli rozpoznano bezpieczną sygnaturę. Alternatywnie mod uczy się jej po kolejnych naciśnięciach `1`, `2`, `3` (te trzy klawisze nie zmieniają natywnego działania). |
+| Junk Slots, 10 aktorów | Nowa logika host-only chowa rzeczywisty, podniesiony fizyką `HeldenPhysicsActor` do niewidocznego stanu przyczepionego do postaci. Nie usuwa ani nie tworzy kopii aktora. |
+| Mouse4/G | Próba schowania aktualnie trzymanego ramionami obiektu `PhysGrabData.Target`. Bez potwierdzenia odczepienia/ukrycia operacja jest odrzucana. |
+| Mouse5/H | Odłącza wybrany aktor, przywraca kolizję, fizykę, widoczność, pojawia się przed postacią. Wyciągnięcie **nie chwyta automatycznie** obiektu ramionami. |
+| `<`, `>` | Zmiana wybranego Junk Slotu (Shift+, / Shift+.). |
+| Jeden slot HUD | Tworzony jest przez `WidgetBlueprintLibrary` z oryginalnej klasy `SlotWidgetClass` i umieszczany w prawym dolnym rogu. Nie ma jeszcze potwierdzonego powiązania grafiki przedmiotu z fizycznym lootem. |
+| Winda i broń palna | Na hostcie przy wejściu do `InteriorCollisionBox` uzupełnia `HeldenRangedWeapon.ItemDurability` do `ItemDurabilityMax`. |
 
-**Do not mistake CI success for a working 10-slot inventory mod.** The game has a four-element native inventory array. Stock UE4SS Lua exposes its elements but has no documented way to safely append new entries, regenerate replicated native slot components and extend save serialization. See [technical evidence](docs/TECHNICAL_STATUS.md).
+## Instalacja
 
-## Experimental installation (firearm refill + diagnostics only)
+1. Pobierz ZIP z najnowszego udanego [GitHub Actions](https://github.com/SirRosa/Grain-Rot-Quickslots-Junk-Slots/actions/workflows/ci.yml).
+2. Wypakuj ZIP z paczki Actions, a następnie folder `GrainRotQuickJunk` do `Helden/Binaries/Win64/ue4ss/Mods/`.
+3. Zachowaj istniejącą instalację UE4SS używaną z pozostałymi modami Grain Rot.
+4. Przed uruchomieniem **zrób kopię zapisu** i wyłącz na test mody modyfikujące sloty gracza.
 
-1. Download `GrainRotQuickJunk-v0.1.0-alpha` from the newest successful [GitHub Actions run](https://github.com/SirRosa/Grain-Rot-Quickslots-Junk-Slots/actions/workflows/ci.yml).
-2. Extract the artifact ZIP, then the inner mod ZIP.
-3. Copy `GrainRotQuickJunk` to the game's UE4SS `Mods` folder, resulting in `Mods/GrainRotQuickJunk/Scripts/main.lua` and `Mods/GrainRotQuickJunk/enabled.txt`.
-4. Back up the save, initially run as the host with other inventory-modification mods disabled. Enter the elevator carrying a damaged firearm, exit, then re-enter. Review entries prefixed `[GrainRotQuickJunk]` in UE4SS.log.
+## Ważne ryzyka — testuj tylko na kopii save'a
 
-Requires the already-working UE4SS v3 setup used for other Grain Rot mods. Do not install the entire `ue4ss` repository folder as a mod.
+**Junk Slots są na tym etapie pamięcią sesji, a NIE trwałym ekwipunkiem.** Schowane aktory mogą zniknąć podczas przejścia do innej mapy, wyjścia z gry lub śmierci, mimo awaryjnej próby odzyskania przy wykryciu zgonu. **Wyciągnij wszystko przed opuszczeniem poziomu**. Przeznaczone do testów z bezwartościowymi obiektami.
 
-## Implementation and test discipline
+**Dodatkowe sloty nie mają potwierdzonej replikacji sieciowej, serializacji ani odświeżania UI.** Jeżeli silnik odrzuca rozszerzenie tablic lub wywołanie natywnego RPC, mod zapisuje komunikat w logu, a nie symuluje sukcesu.
 
-- Derived from [Grain-Rot-Mod-Data-Base](https://github.com/SirRosa/Grain-Rot-Mod-Data-Base), which includes the actual 2026-11-20 Helden UE5.7 reflection and sanitized session logs.
-- Refill writes only `HeldenRangedWeapon.ItemDurability` for known equipped/owned items on the authoritative server, only on a new overlap with `HeldenElevator.InteriorCollisionBox`. No constant durability cheat. Same-world and player filtering.
-- Inventory RPC and physics grabbing signatures are traced through bounded **read-only hooks**.
-- New item storage will only be enabled when host-side ownership transfer, verification, serialization, and multiplayer replication have a proven native mechanism.
-- CI: Lua syntax, mock gameplay tests, pure 10-item state-machine tests, ZIP packaging. **No Grain Rot executable runs in Actions.**
+Wersja powstała na podstawie prawdziwych struktur projektu Helden z [bazy modderskiej](https://github.com/SirRosa/Grain-Rot-Mod-Data-Base). Testy w GitHub Actions to składnia i mocki Lua, **nie test w uruchomionym Grain Rot**.
 
-See [technical status and test plan](docs/TECHNICAL_STATUS.md).
+## Jak przekazać wynik testów
+
+Po testach odczytaj `UE4SS.log` i znajdź wpisy `[GrainRotQuickJunk]`, zwłaszcza:
+- `[QUICK] APPENDED`, `native ItemSlots`, `InventoryAction_Server parameters`
+- `[INPUT] observed native slot`, `CALIBRATED`
+- `[JUNK] STORED`, `RETRIEVED` lub konkretny kod odrzucenia
+- `[JUNK HUD]`, `elevator ENTRY`, `REFILL`
+
+Przetestuj osobno hosta i klienta. Przy niepowodzeniu podeślij zanonimizowany `UE4SS.log`; pozwoli ustalić dokładną sygnaturę funkcji gry zamiast zgadywać.
