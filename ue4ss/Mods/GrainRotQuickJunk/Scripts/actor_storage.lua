@@ -98,7 +98,7 @@ function Store:store(pawn,grabbed)
     local mesh=read(grabbed,"RootMesh")
     local handle=read(pawn,"GrabPhysHandle")
     local data=read(pawn,"PhysGrabData")
-    if not valid(mesh) or not valid(handle) or data==nil or read(data,"Target")~=grabbed then
+    if not valid(mesh) or not valid(handle) or data==nil or path(read(data,"Target"))~=path(grabbed) then
         self.bank:cancel(tx)
         return false,"grab_or_mesh_unavailable"
     end
@@ -182,6 +182,21 @@ function Store:retrieve(pawn)
     if not confirmed then return false,"bank_commit_failed" end
     self:warn("RETRIEVED "..tx.identity.." "..self.bank:count().."/10")
     return true,tx.slot
+end
+function Store:recoverAll(pawn,reason)
+    if not valid(pawn) or self.owner~=path(pawn) then return false,"wrong_owner" end
+    local old=self.bank.selected
+    local rescued,failed=0,0
+    for slot=1,self.bank.capacity do
+        if self.bank.slots[slot] then
+            self.bank:select(slot)
+            local ok=self:retrieve(pawn)
+            if ok then rescued=rescued+1 else failed=failed+1 end
+        end
+    end
+    self.bank:select(old)
+    self:warn("emergency recover reason="..tostring(reason).." rescued="..rescued.." failed="..failed)
+    return failed==0,rescued
 end
 function Store:status()
     return self.bank.selected,self.bank:count(),self.owner,self.world
