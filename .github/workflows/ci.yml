@@ -24,9 +24,9 @@ jobs:
         run: |
           mkdir -p dist
           cd ue4ss/Mods
-          zip -qr ../../dist/GrainRotQuickJunk-v0.3.0-unified-physics.zip GrainRotQuickJunk
+          zip -qr ../../dist/GrainRotQuickJunk-v0.3.1-hotbar-icons.zip GrainRotQuickJunk
       - uses: actions/upload-artifact@v4
         with:
-          name: GrainRotQuickJunk-v0.3.0-unified-physics
-          path: dist/GrainRotQuickJunk-v0.3.0-unified-physics.zip
+          name: GrainRotQuickJunk-v0.3.1-hotbar-icons
+          path: dist/GrainRotQuickJunk-v0.3.1-hotbar-icons.zip
           if-no-files-found: error
