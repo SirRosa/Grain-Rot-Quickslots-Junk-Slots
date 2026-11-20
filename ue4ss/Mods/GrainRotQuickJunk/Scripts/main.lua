@@ -1,0 +1,308 @@
+-- Grain Rot Quickslots & Junk Slots, v0.1.0-alpha.
+-- UE4SS 3.x, Helden UE 5.7. Source-driven research build.
+-- IMPORTANT: This build only mutates firearm durability on elevator ENTRY.
+-- 10-slot inventory/Junk UI are discovery-only until safe native inventory RPCs
+-- and save/network semantics are proven. No item is hidden, moved or destroyed.
+local CFG = {
+    ElevatorRefill = true,
+    PollMillis = 500,
+    LogInventoryProbes = true,
+    LogInputHookOnce = true,
+    MaxProbeEvents = 8,
+}
+local TAG = "[GrainRotQuickJunk] "
+local function log(msg) print(TAG .. tostring(msg) .. "\n") end
+local function valid(o)
+    if o == nil then return false end
+    local ok,yes=pcall(function() return o:IsValid() end)
+    return ok and yes == true
+end
+local function get(o,k)
+    if o == nil then return nil end
+    local ok,v=pcall(function() return o[k] end)
+    if ok then return v end
+    return nil
+end
+local function number(x)
+    local n=tonumber(x)
+    if n and n==n and n>-1e9 and n<1e9 then return n end
+    return nil
+end
+local function full(o)
+    if not valid(o) then return "?" end
+    local ok,v=pcall(function() return o:GetFullName() end)
+    if ok and v then return tostring(v) end
+    return "?"
+end
+local function all(class)
+    if type(FindAllOf)~="function" then return {} end
+    local ok,v=pcall(FindAllOf,class)
+    if ok and type(v)=="table" then return v end
+    return {}
+end
+local function isA(o,class)
+    if not valid(o) then return false end
+    local ok,yes=pcall(function() return o:IsA("/Script/Helden."..class) end)
+    if ok and yes==true then return true end
+    local c
+    pcall(function() c=o:GetClass() end)
+    for _=1,10 do
+        if not valid(c) then break end
+        if full(c):find(class,1,true) then return true end
+        local parent
+        pcall(function() parent=c:GetSuperStruct() end)
+        c=parent
+    end
+    return false
+end
+local function worldOf(o)
+    if not valid(o) then return nil end
+    local w
+    pcall(function() w=o:GetWorld() end)
+    if valid(w) then return full(w) end
+    return nil
+end
+local function unique(items, obj)
+    if not valid(obj) then return end
+    items[full(obj)] = obj
+end
+local function equippedGuns(pawn)
+    local found = {}
+    local arr=get(pawn,"EquipedItems")
+    local n=0
+    pcall(function() n=math.min(#arr,64) end)
+    for i=1,n do
+        local obj
+        pcall(function() obj=arr[i] end)
+        if isA(obj,"HeldenRangedWeapon") then unique(found,obj) end
+    end
+    -- A ranged weapon may have a native slot but not appear in EquipedItems.
+    -- PreviousOwner alone is insufficient: it also remains on dropped items.
+    local ownerPath=full(pawn)
+    for _,item in ipairs(all("HeldenRangedWeapon")) do
+        if valid(item) and full(get(item,"PreviousOwner"))==ownerPath
+            and valid(get(item,"CurrentSlot")) then
+            unique(found,item)
+        end
+    end
+    return found
+end
+local function refillGun(gun)
+    local max=number(get(gun,"ItemDurabilityMax"))
+    local cur=number(get(gun,"ItemDurability"))
+    if not max or max<=0 or not cur or cur<0 then return false end
+    if cur>=max then return false end
+    local ok,err=pcall(function() gun.ItemDurability=max end)
+    if not ok then log("REFILL failed "..full(gun)..": "..tostring(err));return false end
+    local readback=number(get(gun,"ItemDurability"))
+    if readback and math.abs(readback-max)<0.01 then
+        log(string.format("REFILL %.1f -> %.1f %s",cur,max,full(gun)))
+        return true
+    end
+    log("REFILL unconfirmed (readback mismatch): "..full(gun))
+    return false
+end
+local session={inside={},world=nil,probedWorld=nil,junkIndex=1,probEvents=0,overlapError=false}
+local function hostFor(world)
+    for _,class in ipairs({"HeldenGameMode","GameModeBase"}) do
+        for _,gm in ipairs(all(class)) do
+            local path=full(gm)
+            if valid(gm) and not path:find("Default__",1,true) and worldOf(gm)==world then
+                return gm
+            end
+        end
+    end
+    return nil
+end
+local function inElevator(pawn,elevators,world)
+    for _,lift in ipairs(elevators) do
+        if valid(lift) and worldOf(lift)==world then
+            local box=get(lift,"InteriorCollisionBox")
+            if valid(box) then
+                local ok,inside=pcall(function() return box:IsOverlappingActor(pawn) end)
+                if ok and inside==true then return true end
+                if not ok and not session.overlapError then
+                    session.overlapError=true
+                    log("InteriorCollisionBox overlap API unavailable; refill is fail-closed")
+                end
+            end
+        end
+    end
+    return false
+end
+local function probeInventory(pawn)
+    local slots=get(pawn,"ItemSlots")
+    local settings=get(get(pawn,"InventorySettings"),"SlotSettings")
+    local n,m=-1,-1
+    pcall(function() n=#slots end)
+    pcall(function() m=#settings end)
+    local grab=get(get(pawn,"PhysGrabData"),"Target")
+    log(string.format("PROBE native inventory slots=%d settings=%d grabbed=%s",
+        n,m,full(grab)))
+    local widget
+    for _,ui in ipairs(all("HeldenInventoryWidget")) do
+        if valid(ui) then widget=ui;break end
+    end
+    if widget then
+        local w=-1
+        pcall(function() w=#get(widget,"SlotWidgets") end)
+        log("PROBE InventoryWidget.SlotWidgets="..w..
+            " / SlotWidgetClass="..full(get(widget,"SlotWidgetClass")))
+    end
+end
+local function poll()
+    local pcs=all("HeldenPlayerController")
+    local elevators=all("HeldenDungeonElevator")
+    for _,pc in ipairs(pcs) do
+        if valid(pc) and not full(pc):find("Default__",1,true) then
+            local pawn
+            pcall(function() pawn=pc:GetPawn() end)
+            if isA(pawn,"HeldenCharacter") then
+                local world=worldOf(pawn)
+                if world then
+                    if session.world~=world then
+                        session.world=world
+                        session.inside={}
+                        session.probedWorld=nil
+                        session.overlapError=false
+                    end
+                    if CFG.LogInventoryProbes and session.probedWorld~=world then
+                        session.probedWorld=world
+                        probeInventory(pawn)
+                    end
+                    -- Do not mutate client inventory. GameMode exists only on server.
+                    local host=hostFor(world)
+                    if host then
+                        local key=full(pawn)
+                        local inside=inElevator(pawn,elevators,world)
+                        if inside and session.inside[key]~=true then
+                            session.inside[key]=true
+                            if CFG.ElevatorRefill then
+                                local count=0
+                                for _,gun in pairs(equippedGuns(pawn)) do
+                                    if refillGun(gun) then count=count+1 end
+                                end
+                                log("elevator ENTRY: refilled weapons="..count.." player="..key)
+                            end
+                        elseif not inside then
+                            session.inside[key]=false
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+local function localPawn()
+    local first=nil
+    for _,pc in ipairs(all("HeldenPlayerController")) do
+        if valid(pc) and not full(pc):find("Default__",1,true) then
+            local pawn
+            pcall(function() pawn=pc:GetPawn() end)
+            if isA(pawn,"HeldenCharacter") then
+                first=first or pawn
+                local ok,localController=pcall(function() return pc:IsLocalController() end)
+                if ok and localController==true then return pawn end
+            end
+        end
+    end
+    return first
+end
+local function onInput(action,source)
+    if action=="junk_prev" then
+        session.junkIndex=(session.junkIndex+8)%10+1
+        log("JUNK preview: selected "..session.junkIndex.."/10; no item transferred")
+    elseif action=="junk_next" then
+        session.junkIndex=session.junkIndex%10+1
+        log("JUNK preview: selected "..session.junkIndex.."/10; no item transferred")
+    elseif action=="junk_put" then
+        local pawn=localPawn()
+        local grabbed=pawn and get(get(pawn,"PhysGrabData"),"Target")
+        log("JUNK store requested by "..source.."; selected="..session.junkIndex..
+            " target="..full(grabbed)..
+            "; BLOCKED: native grab release + persistent storage not verified")
+    elseif action=="junk_take" then
+        log("JUNK retrieve requested by "..source..
+            "; BLOCKED: no item has been deposited (fail-closed)")
+    elseif action:find("quick_",1,true)==1 then
+        log("QUICK "..action:sub(7).."/10 pressed; game native slots unchanged")
+    end
+end
+local function queueInput(action,source)
+    if type(ExecuteInGameThread)=="function" then
+        ExecuteInGameThread(function()
+            local ok,err=pcall(onInput,action,source)
+            if not ok then log("input failed: "..tostring(err)) end
+        end)
+    else
+        log("input ignored: ExecuteInGameThread unavailable")
+    end
+end
+local function bind(keyName,action)
+    local k=type(Key)=="table" and Key[keyName] or nil
+    if k==nil or type(RegisterKeyBind)~="function" then
+        log("BIND unavailable: "..keyName)
+        return
+    end
+    local ok,err=pcall(function()
+        RegisterKeyBind(k,function() queueInput(action,keyName) end)
+    end)
+    if ok then log("BIND "..keyName.." => "..action)
+    else log("BIND error "..keyName..": "..tostring(err)) end
+end
+bind("XBUTTON_ONE","junk_put")
+bind("XBUTTON_TWO","junk_take")
+bind("G","junk_put")
+bind("H","junk_take")
+bind("OEM_COMMA","junk_prev")
+bind("OEM_PERIOD","junk_next")
+for n,keyName in ipairs({"ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE","ZERO"}) do
+    -- 1-4 remain native. Intercepting those would duplicate/conflict with base input.
+    if n>=5 then bind(keyName,"quick_"..n) end
+end
+-- Read-only prehook: collect actual signature of key native inventory action.
+local function probeHook(path,label)
+    if type(RegisterHook)~="function" then return end
+    local ok,err=pcall(function()
+        RegisterHook(path,function(context,...)
+            if session.probEvents>=CFG.MaxProbeEvents then return end
+            session.probEvents=session.probEvents+1
+            local args={...}
+            local info={}
+            for i=1,math.min(#args,8) do
+                local a=args[i]
+                local okv,value=pcall(function() return a:get() end)
+                info[i]=tostring(okv and value or a)
+            end
+            log("HOOK "..label.." args="..#args.." ["..table.concat(info," | ").."]")
+        end)
+    end)
+    if ok then log("HOOK registered: "..label)
+    else log("HOOK unavailable "..label..": "..tostring(err)) end
+end
+if CFG.LogInputHookOnce then
+    probeHook("/Script/Helden.HeldenPlayerController:InventoryAction_Server","InventoryAction_Server")
+    probeHook("/Script/Helden.HeldenCharacter:GrabObject_Server","GrabObject_Server")
+end
+local function safePoll()
+    local ok,err=pcall(poll)
+    if not ok then log("poll failed: "..tostring(err)) end
+end
+if type(LoopInGameThreadWithDelay)=="function" then
+    local ok,err=pcall(function() LoopInGameThreadWithDelay(CFG.PollMillis,safePoll) end)
+    if ok then log("poller active: "..CFG.PollMillis.."ms on game thread")
+    else log("poller unavailable: "..tostring(err)) end
+else
+    -- Fallback callback rate is game-dependent: do not claim 500ms here.
+    local sample=0
+    local ok,err=pcall(function()
+        RegisterHook("/Game/Animation/ABP_HeldenPlayer.ABP_HeldenPlayer_C:BlueprintUpdateAnimation",
+        function()
+            sample=sample+1
+            if sample>=120 then sample=0;safePoll() end
+        end)
+    end)
+    if ok then log("fallback sampled animation heartbeat active")
+    else log("NO POLLER: "..tostring(err)) end
+end
+log("v0.1.0-alpha loaded. Elevator refill experimental; inventory and HUD read-only.")
