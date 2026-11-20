@@ -324,10 +324,11 @@ local function poll()
                         end
                         -- Only render the 6 additional native UI widgets after
                         -- the real reflected ItemSlots array contains 10 entries.
-                        if session.quickUI and isLocal and (deepPoll or
-                            not session.quickUiReady[key]) then
-                            -- Successful widgets are checked only every 2s;
-                            -- failed initialization retries on deepPoll.
+                        if session.quickUI and isLocal and deepPoll and
+                            (not session.quickUiReady[key] or session.pollCount%20==0) then
+                            -- Initial creation retries at most every 2 seconds.
+                            -- Healthy HUD is validated/relabeled every 10 s,
+                            -- not 6 widget reads every game-thread tick.
                             local slotArray=get(pawn,"ItemSlots")
                             local n=0
                             pcall(function() n=#slotArray end)
