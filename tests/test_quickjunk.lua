@@ -121,6 +121,55 @@ end
 assert(pc.rpcCalls==6,"all six new hotkeys must trigger server inventory RPC")
 assert(hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"]~=nil,
     "1-4 selection must be detected without double-binding the native keys")
+-- End-to-end integration: RMB on a physics world item + E must store
+-- in the ordinary 1-0 bar, and native 1/2/3/4 selection must grab it.
+local junk=object("HeldenPhysicsActor","HeldenPhysicsActor /Game/Test.Junk",world)
+junk.bCanBeGrabbed=true
+junk.bHidden=false
+junk.collision=true
+junk.pos={X=10,Y=0,Z=20}
+junk.rot={Pitch=0,Yaw=0,Roll=0}
+junk.RootMesh=object("StaticMeshComponent","Mesh /Game/Test.JunkMesh",world)
+function junk.RootMesh:SetSimulatePhysics(v) self.physics=v end
+function junk:IsHidden() return self.bHidden end
+function junk:SetActorHiddenInGame(v) self.bHidden=v end
+function junk:SetActorEnableCollision(v) self.collision=v end
+function junk:GetClass() return object("Class","Class /Script/Helden.HeldenPhysicsActor",world) end
+function junk:K2_GetActorLocation() return self.pos end
+function junk:K2_GetActorRotation() return self.rot end
+function junk:K2_TeleportTo(pos,rot) self.pos=pos;self.rot=rot;return true end
+function pawn:GetActorForwardVector() return {X=1,Y=0,Z=0} end
+function pawn:K2_GetActorLocation() return {X=0,Y=0,Z=0} end
+function pawn:K2_GetActorRotation() return {Pitch=0,Yaw=0,Roll=0} end
+function pawn:ReleaseObject_Server()
+    self.releases=(self.releases or 0)+1
+    self.PhysGrabData.Target=nil
+end
+function pawn:GrabObject_Server(data)
+    self.grabs=(self.grabs or 0)+1
+    self.lastGrab=data
+    self.PhysGrabData.Target=data.Target
+end
+pawn.PhysGrabData={
+    Target=junk,GrabUp={X=0,Y=0,Z=1},GrabNormal={X=1,Y=0,Z=0},
+    GrabLocation={X=11,Y=1,Z=20},
+    PhysHandleTargetLocation={X=100,Y=0,Z=50},
+    StartFireTimer={Timestamp=9.7}}
+binds[69]()
+assert(pawn.releases==1,"E should call native release once")
+assert(junk.bHidden==false,"held actor cannot be hidden before native release")
+pollN(2)
+assert(junk.bHidden==true and junk.collision==false)
+local nativeHook=hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"]
+nativeHook.post({get=function() return pc end},{get=function() return 0 end})
+assert(pawn.grabs==1 and pawn.lastGrab.Target==junk,
+    "native quickslot 1 selection must send native GrabObject_Server")
+assert(pawn.PhysGrabData.Target==junk)
+poller()
+binds[69]()
+pollN(2)
+assert(junk.bHidden and pawn.releases==2,
+    "E should safely restow the already-selected quickslot into same slot")
 local sawRefill,sawBlocked=false,false
 for _,msg in ipairs(messages) do
     if msg:find("REFILL",1,true) then sawRefill=true end
