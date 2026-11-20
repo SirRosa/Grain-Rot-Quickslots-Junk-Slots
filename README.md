@@ -1,8 +1,15 @@
 # Grain Rot — Quickslots / Junk Slots
 
-**v0.2.3-inputfix** — poprawka oparta na prawdziwym logu UE4SS(5): odnajdywanie BP postaci / LastPlayerChar, weryfikacja natywnych tablic dokładnie w UE4SS 3.0.1 (`1c1a1497`), ponawianie rozszerzenia rzeczywistych slotów oraz budowa paska UI z oryginalnych widgetów gry. **Wciąż wymaga testu w grze — zielony CI nie oznacza, że sloty rzeczywiście się pojawiają.**
+**v0.2.4-visibility-perf** — poprawka oparta na prawdziwym logu UE4SS(5): odnajdywanie BP postaci / LastPlayerChar, weryfikacja natywnych tablic dokładnie w UE4SS 3.0.1 (`1c1a1497`), ponawianie rozszerzenia rzeczywistych slotów oraz budowa paska UI z oryginalnych widgetów gry. **Wciąż wymaga testu w grze — zielony CI nie oznacza, że sloty rzeczywiście się pojawiają.**
 
 [Szczegółowe ustalenia z logu](docs/UE4SS5-REAL-LOG-ROOT-CAUSE.md).
+
+## Poprawka 0.2.4 — niewidoczne schowane przedmioty i ograniczenie laga
+
+- **Modele przy postaci:** po wykryciu `HeldenEquipableItem.CurrentInventorySlot` w dodatkowych slotach `5–10` mod odczytuje `HolsterState` (gra: `Equipped=1`, `Holsterd=2`). Przedmioty **schowane** w tych slotach są ukrywane wyłącznie wizualnie (`SetActorHiddenInGame(true)`). Po wybraniu slotu przedmiot odzyskuje widoczność w rękach. Zwykłe sloty `1–4` nie są modyfikowane.
+- **Bez zmian w ekwipunku:** nie usuwamy aktorów, nie zmieniamy ich pozycji, mocowań, kolizji ani danych zapisu. Po wyrzuceniu / przełożeniu przedmiotu lub zmianie poziomu mod przywraca widoczność, jeśli to on go wcześniej ukrył.
+- **Mniej operacji na wątku gry:** skanowanie kontrolerów, autorytetu hosta oraz wind wykonuje się co **2 s** zamiast co **0,5 s**. Odświeżanie już działającego interfejsu 5–0 odbywa się co **10 s** (pierwsze próby inicjalizacji maks. co 2 s). Diagnostyczne `FindAllOf` UI i niepotrzebne hooki `InventoryAction_Server` / `GrabObject_Server` są wyłączone w wydaniu. Nadal istnieje lekka pętla 500 ms dla oczekującego Junk Slotu.
+- **Kompromis:** wykrycie wejścia do windy i uzupełnianie amunicji może być opóźnione do około 2 s. Jeśli w grze nadal są spadki FPS, potrzebny jest test na tych samych ustawieniach z modem włączonym/wyłączonym oraz nowy `UE4SS.log`. GitHub Actions nie mierzy prawdziwego FPS.
 
 ## Poprawka 0.2.3 — wybieranie slotów 5–0
 
@@ -24,7 +31,7 @@ W poprzednim wydaniu same sloty i widżety działały, ale obsługa klawiszy nie
 
 | Funkcja | Obecny stan |
 |---|---|
-| 10 Quickslotów (`1–0`) | Próba rozszerzenia `InventorySettings.SlotSettings` z 4 do 10 i stworzenia brakujących `HeldenInventorySlotComponent` / `ItemSlots`. Gra musi zaakceptować nowe obiekty oraz ich replikację; UI próbuje dobudować 6 oryginalnych slotów dopiero po potwierdzeniu 10 rzeczywistych miejsc. W grze nadal niezweryfikowane. |
+| 10 Quickslotów (`1–0`) | Użytkownik potwierdził pojawienie się prawdziwych slotów i wkładanie przedmiotów. Zostawiamy natywne 10 slotów. Przedmioty w dodatkowych slotach są ukrywane na postaci, kiedy `HolsterState=Holsterd`, ale widoczne podczas aktywnego używania. |
 | Klawisze `5–0` | Natywny `InventoryAction_Server(InIdx:int)` na lokalnym kontrolerze, pozyskanym przez `LastPlayerChar` (prawdziwy `GetPawn` jest pusty). Indeksy 4–9; graficzny HUD z poprzedniego wydania pozostaje bez zmian. |
 | Junk Slots, 10 aktorów | Nowa logika host-only chowa rzeczywisty, podniesiony fizyką `HeldenPhysicsActor` do niewidocznego stanu przyczepionego do postaci. Nie usuwa ani nie tworzy kopii aktora. |
 | Mouse4/G | Kolejkuje bezpieczniejsze schowanie aktualnie trzymanego ramionami obiektu po puszczeniu PPM `PhysGrabData.Target`. Bez potwierdzenia odczepienia/ukrycia operacja jest odrzucana. |
