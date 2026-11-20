@@ -110,7 +110,14 @@ function M.extendDefaults()
     end
     local settings=get(get(defaults,"InventorySettings"),"SlotSettings")
     local n=arrayLen(settings)
-    if n==10 then return true,"CDO_10_ready" end
+    if n==10 then
+        for i=5,10 do
+            if enumString(get(get(settings,i),"SlotName"))~="GrainRotQuick"..i then
+                return false,"CDO_other_10_slot_layout"
+            end
+        end
+        return true,"CDO_10_ready"
+    end
     if n~=4 then
         return false,"CDO_unexpected_settings_"..tostring(n)
     end
