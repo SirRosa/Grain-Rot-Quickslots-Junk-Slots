@@ -5,7 +5,12 @@ print=function(s) messages[#messages+1]=tostring(s) end
 Key={XBUTTON_ONE=5,XBUTTON_TWO=6,G=71,H=72,OEM_COMMA=188,OEM_PERIOD=190,
     ONE=49,TWO=50,THREE=51,FOUR=52,FIVE=53,SIX=54,SEVEN=55,
     EIGHT=56,NINE=57,ZERO=48}
-RegisterKeyBind=function(k,cb) assert(not binds[k],"duplicate bind"); binds[k]=cb end
+ModifierKey={SHIFT=16}
+RegisterKeyBind=function(k,mods,cb)
+    if cb~=nil then assert(mods[1]==16,"< and > must require Shift")
+    else cb=mods end
+    assert(not binds[k],"duplicate bind"); binds[k]=cb
+end
 RegisterHook=function(k,cb) hooks[k]=cb;return 1,2 end
 ExecuteInGameThread=function(cb) cb() end
 LoopInGameThreadWithDelay=function(ms,cb) assert(ms==500);poller=cb end
