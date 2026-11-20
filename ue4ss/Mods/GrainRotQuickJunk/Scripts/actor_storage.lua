@@ -188,6 +188,11 @@ function Store:retrieve(pawn)
     if not getWorld(pawn) or getWorld(pawn)~=self.world then
         return false,"different_world"
     end
+    -- Do not teleport or re-enable physical actors while the player is
+    -- holding another item with the game's native physics handle.
+    if valid(read(read(pawn,"PhysGrabData"),"Target")) then
+        return false,"release_current_rmb_grab_before_retrieve"
+    end
     local tx,reason=self.bank:beginWithdraw()
     if not tx then return false,reason end
     local item=tx.actor
