@@ -107,7 +107,13 @@ local hasStore,storeModule=pcall(require,"junk_store")
 if hasStore and type(storeModule)=="table" and type(storeModule.new)=="function" then
     session.bank=storeModule.new(10)
 else
-    log("Junk transaction module failed to load; controls remain diagnostic only")
+    log("ERROR: Junk transaction module failed to load: "..tostring(storeModule))
+end
+local hasActors,actorsModule=pcall(require,"actor_storage")
+if hasActors and session.bank and type(actorsModule)=="table" then
+    session.storage=actorsModule.new(session.bank,log)
+else
+    log("ERROR: actor storage unavailable: "..tostring(actorsModule))
 end
 local function hostFor(world)
     for _,class in ipairs({"HeldenGameMode","GameModeBase"}) do
@@ -234,16 +240,28 @@ local function onInput(action,source)
     elseif action=="junk_put" then
         local pawn=localPawn()
         local grabbed=pawn and get(get(pawn,"PhysGrabData"),"Target")
-        if session.bank and valid(grabbed) then
-            local tx=session.bank:beginStore(full(grabbed),grabbed)
-            if tx then session.bank:cancel(tx) end -- never commit without native proof
+        local world=pawn and worldOf(pawn)
+        if not pawn or not world or not hostFor(world) then
+            log("JUNK "..source.." ERROR: authoritative host pawn unavailable")
+        elseif not session.storage then
+            log("JUNK "..source.." ERROR: storage module missing")
+        else
+            local success,result=session.storage:store(pawn,grabbed)
+            log("JUNK "..source.." store="..tostring(success)..
+                " result="..tostring(result))
         end
-        log("JUNK store requested by "..source.."; selected="..session.junkIndex..
-            " target="..full(grabbed)..
-            "; BLOCKED: native grab release + persistent storage not verified")
     elseif action=="junk_take" then
-        log("JUNK retrieve requested by "..source..
-            "; BLOCKED: no item has been deposited (fail-closed)")
+        local pawn=localPawn()
+        local world=pawn and worldOf(pawn)
+        if not pawn or not world or not hostFor(world) then
+            log("JUNK "..source.." ERROR: authoritative host pawn unavailable")
+        elseif not session.storage then
+            log("JUNK "..source.." ERROR: storage module missing")
+        else
+            local success,result=session.storage:retrieve(pawn)
+            log("JUNK "..source.." retrieve="..tostring(success)..
+                " result="..tostring(result))
+        end
     elseif action:find("quick_",1,true)==1 then
         log("QUICK "..action:sub(7).."/10 pressed; game native slots unchanged")
     end
