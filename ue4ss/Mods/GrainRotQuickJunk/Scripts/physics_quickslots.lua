@@ -11,6 +11,8 @@
 -- Selection uses native GrabObject_Server(InGrabData:HeldenPhysGrabData).
 local M={}
 M.__index=M
+local hasIcons,icons=pcall(require,"physics_quickslot_icons")
+if not hasIcons then icons=nil end
 local function valid(o)
     if o==nil then return false end
     local ok,v=pcall(function() return o:IsValid() end)
@@ -253,7 +255,7 @@ function M:signal()
     self.changed=true
     self.saveDirty=true
 end
-function M:requestStore(pawn)
+function M:requestStore(pawn,pc)
     if self.pending then return false,"transaction_pending" end
     if not valid(pawn) then return false,"no_character" end
     local target=grabTarget(pawn)
@@ -273,6 +275,14 @@ function M:requestStore(pawn)
     else
         slot,why=self:firstFree(pawn)
         if not slot then return false,why end
+    end
+    -- Never hide an object if the game has no actual quickslot widget to
+    -- show its occupancy. This was a key failure in v0.3.0.
+    if pc and icons then
+        local shown,why=icons.canRender(pc,slot)
+        if not shown then
+            return false,"cannot_show_quickslot_icon_"..tostring(why)
+        end
     end
     local sampled,reason=grabSnapshot(pawn,target)
     if not sampled then return false,reason end
@@ -366,6 +376,12 @@ function M:requestSelect(pawn,slot)
         return false,"grab_payload_missing_item_visible_on_ground"
     end
     -- Verified native UFunction: GrabObject_Server(InGrabData:HeldenPhysGrabData).
+    -- Refresh the game-time part of HeldenNetworkTimer when possible:
+    -- replaying an old timestamp captured minutes ago may be rejected.
+    local time
+    pcall(function() time=pawn:GetWorld():GetTimeSeconds() end)
+    time=tonumber(time)
+    if time and time>=0 then data.StartFireTimer.Timestamp=time end
     local ok,result=call(pawn,"GrabObject_Server",data)
     if not ok then
         -- Cannot rely on native RPC struct marshalling succeeding on every
@@ -520,70 +536,21 @@ function M:resetWorld()
     self.owner=nil;self.world=nil;self.queuedSelect=nil
     self.marked={}
     self.unresolvedSlots={}
+    if icons then icons.reset() end
     self:signal()
 end
-local DIGITS={"1","2","3","4","5","6","7","8","9","0"}
-local function ftext(value)
-    if not FText then return nil end
-    local ok,v=pcall(FText,value)
-    if ok then return v end
-end
 function M:refreshUI(pc)
-    if not valid(pc) then return false,"no_controller" end
-    local hud
-    pcall(function() hud=pc:GetHUD() end)
-    local ui=get(get(hud,"PlayerHudWidget"),"InventoryWidget")
-    if not valid(ui) then return false,"no_native_quickbar" end
-    local widgets=get(ui,"SlotWidgets")
-    local n=0
-    pcall(function() n=#widgets end)
-    if n<10 then return false,"native_widgets_not_ready" end
-    for i=1,10 do
-        local w=get(widgets,i)
-        local icon=get(w,"InputIcon")
-        local txt=get(icon,"InputKeyText")
-        if valid(txt) then
-            local stored=self.slots[i]~=nil
-            local missing=self.unresolvedSlots[i]==true
-            local expected=stored and DIGITS[i].."+" or
-                (missing and DIGITS[i].."?" or DIGITS[i])
-            if stored or missing or self.marked[i] or i>=5 then
-                local existing
-                pcall(function()
-                    local v=txt:GetText()
-                    existing=v:ToString()
-                end)
-                if tostring(existing)~=expected then
-                    local v=ftext(expected)
-                    if v then pcall(function() txt:SetText(v) end) end
-                end
-                local image=get(icon,"InputIconWidget")
-                if stored or missing then
-                    if not self.marked[i] and valid(image) then
-                        local original
-                        pcall(function() original=image:GetVisibility() end)
-                        self.marked[i]={originalVisibility=original}
-                    elseif not self.marked[i] then
-                        self.marked[i]={}
-                    end
-                    pcall(function() txt:SetVisibility(0) end)
-                    if valid(image) then
-                        pcall(function() image:SetVisibility(2) end)
-                    end
-                elseif self.marked[i] then
-                    if i<=4 and valid(image) then
-                        local original=self.marked[i].originalVisibility
-                        if original~=nil then
-                            pcall(function() image:SetVisibility(original) end)
-                        end
-                    end
-                    self.marked[i]=nil
-                end
-            end
-        end
+    if not icons then
+        self.changed=false
+        return false,"native_quickslot_icons_unavailable"
     end
-    self.changed=false
-    return true,"native_quickbar_1_to_0_occupancy_labels"
+    local ok,result=icons.refresh(pc,self)
+    if ok then self.changed=false end
+    return ok,result
+end
+function M:canRenderSlot(pc,slot)
+    if not icons then return false,"native_quickslot_icons_unavailable" end
+    return icons.canRender(pc,slot)
 end
 M.nativeOccupied=nativeOccupied
 M.grabSnapshot=grabSnapshot
