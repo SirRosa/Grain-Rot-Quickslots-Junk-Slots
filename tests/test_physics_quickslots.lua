@@ -152,8 +152,8 @@ for i=1,10 do
     function t:SetText(v) self.text=v.value end
     function t:SetVisibility(_) end
     ui.SlotWidgets[i]={InputIcon={InputKeyText=t}}
-    function ui.SlotWidgets[i]:IsValid() return true end
-    function ui.SlotWidgets[i].InputIcon:IsValid() return true end
+    ui.SlotWidgets[i].IsValid=function() return true end
+    ui.SlotWidgets[i].InputIcon.IsValid=function() return true end
 end
 FText=setmetatable({},{__call=function(_,value) return {value=value} end})
 local pc=make("HeldenPlayerController","/Game/Test.PC",w)
