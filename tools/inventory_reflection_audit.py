@@ -153,3 +153,21 @@ for key in data["structs"]:
     if any(x in key for x in ("WBP_InventorySlot", "WBP_Item", "HeldenItemAsset", "HeldenConstructAsset",
                               "WBP_Construct", "HeldenDataSingleton","HeldenPhysicsActor")):
         print("SCHEMA",key,json.dumps(data["structs"][key],ensure_ascii=False)[:16000])
+
+print("\nWBP SLOT FIELDS FROM OBJECTDUMP")
+for line in txt.splitlines():
+    if "Property /Game/UI/Inventory/WBP_InventorySlot.WBP_InventorySlot_C:" in line or (
+        "Property /Game/UI/Inventory/WBP_InventorySlot." in line and
+        any(q in line.lower() for q in ("icon","image","item","brush","slot"))):
+        print("WBP FIELD",line[:350])
+print("\nWBP SLOT BP CLASS SERIALIZABLE STRUCT")
+for line in txt.splitlines():
+    if "/Game/UI/Inventory/WBP_InventorySlot.WBP_InventorySlot_C:" in line and
+        any(q in line for q in ("ObjectProperty", "StructProperty", "IntProperty")) and
+        not "Function" in line:
+        print("BP FIELD",line[:330])
+print("\nCONSTRUCT ASSET GET ICON FUNCTIONS")
+for line in txt.splitlines():
+    if "Function /Script/Helden." in line and any(q in line for q in (
+        "HeldenConstructAsset:","HeldenIconGenerator:","HeldenPhysTreasure",
+        "HeldenItemDataAsset:")): print("ICON FUNC",line[:270])
