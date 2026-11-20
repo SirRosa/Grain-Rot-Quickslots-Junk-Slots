@@ -339,6 +339,34 @@ local function localPawn()
     end
     return nil
 end
+-- Gameplay GetPawn() is NIL for the live BP_HeldenPlayerCharacter_01_C
+-- in UE4SS(6).log. The player controller owns LastPlayerChar instead.
+-- Always resolve the *local* controller and its selected player together.
+local function localQuickController()
+    if session.context then
+        local ctx=session.context.pickLocal()
+        if ctx and valid(ctx.pc) and valid(ctx.pawn) and ctx.isLocal then
+            return ctx.pc,ctx.pawn,ctx.source
+        end
+    end
+    -- Fallback for older versions without the player_context helper.
+    for _,pc in ipairs(all("HeldenPlayerController")) do
+        if valid(pc) and not full(pc):find("Default__",1,true) then
+            local localOk=false
+            pcall(function() localOk=pc:IsLocalController()==true end)
+            if localOk then
+                local candidate
+                pcall(function() candidate=pc:GetPawn() end)
+                if not valid(candidate) then candidate=get(pc,"LastPlayerChar") end
+                if valid(candidate) and get(candidate,"ItemSlots")~=nil then
+                    return pc,candidate,"native_pc_fallback"
+                end
+            end
+        end
+    end
+    return nil,nil,"local_controller_not_found"
+end
+
 local function onInput(action,source)
     if action=="junk_prev" then
         if session.bank then
@@ -389,29 +417,20 @@ local function onInput(action,source)
         if session.input then session.input.mark(tonumber(action:sub(7))) end
     elseif action:find("quick_",1,true)==1 then
         local slot=tonumber(action:sub(7))
-        local pawn=localPawn()
-        local pc
-        if pawn then
-            for _,candidate in ipairs(all("HeldenPlayerController")) do
-                local p
-                pcall(function() p=candidate:GetPawn() end)
-                if valid(p) and full(p)==full(pawn) then pc=candidate;break end
-            end
-        end
-        if not session.native then
-            log("QUICK "..tostring(slot).." unavailable: native module missing")
+        local pc,pawn,sourceName=localQuickController()
+        if not pc or not pawn then
+            log("QUICK "..tostring(slot).." ERROR: "..tostring(sourceName)..
+                "; key="..tostring(source))
+        elseif not session.native then
+            log("QUICK "..tostring(slot).." ERROR: native inventory bridge missing")
         else
-            local success,reason=session.native.select(pc,pawn,slot)
-            if not success and session.input and pawn and pc then
-                local nativeSlots=get(pawn,"ItemSlots")
-                local n=0
-                pcall(function() n=#nativeSlots end)
-                if n>=slot then
-                    success,reason=session.input.activate(pc,slot)
-                end
-            end
-            log("QUICK "..tostring(slot).." native select="..tostring(success)..
-                " outcome="..tostring(reason))
+            local success,why=session.native.select(pc,pawn,slot)
+            -- The game method accepts exactly one IntProperty InIdx.
+            -- Never swallow an unresolved controller or claim a slot switched
+            -- merely because RegisterKeyBind returned true.
+            log("QUICK "..tostring(slot).." controller="..full(pc)..
+                " pawn="..full(pawn).." source="..tostring(sourceName)..
+                " dispatched="..tostring(success).." reason="..tostring(why))
         end
     end
 end
@@ -503,4 +522,4 @@ else
     if ok then log("fallback sampled animation heartbeat active")
     else log("NO POLLER: "..tostring(err)) end
 end
-log("v0.2.2-safetyfix: native 5-0 labels; Junk stores only after Grain Rot releases RMB. UE4SS live-game confirmation pending.")
+log("v0.2.3-inputfix: 5-0 uses local HeldenPlayerController via LastPlayerChar when GetPawn=nil; native InventoryAction_Server(InIdx:int).")
