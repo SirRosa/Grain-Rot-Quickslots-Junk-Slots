@@ -221,7 +221,7 @@ end
 function M.new(logger)
     return setmetatable({log=logger or function() end,slots={},pending=nil,
         active=nil,owner=nil,world=nil,queuedSelect=nil,
-        changed=true,dropTicks=0,saveDirty=false},M)
+        changed=true,dropTicks=0,saveDirty=false,marked={}},M)
 end
 function M:count()
     local count=0
@@ -291,7 +291,10 @@ function M:requestStore(pawn)
     -- Native RPC takes ZERO parameters (verified from the live ObjectDump).
     -- Do not mutate the current PhysGrabData or the physics handle.
     local released,err=call(pawn,"ReleaseObject_Server")
-    if not released then return false,"native_release_failed_"..tostring(err) end
+    if not released then
+        if oldSlot then entry.state="held" end
+        return false,"native_release_failed_"..tostring(err)
+    end
     self.owner=name(pawn);self.world=pw
     self.pending={op="store",actor=target,entry=entry,slot=slot,
         world=pw,owner=self.owner,waits=0,releaseTicks=0}
@@ -503,6 +506,7 @@ end
 function M:resetWorld()
     self.pending=nil;self.active=nil;self.slots={}
     self.owner=nil;self.world=nil;self.queuedSelect=nil
+    self.marked={}
     self:signal()
 end
 local DIGITS={"1","2","3","4","5","6","7","8","9","0"}
@@ -526,8 +530,9 @@ function M:refreshUI(pc)
         local icon=get(w,"InputIcon")
         local txt=get(icon,"InputKeyText")
         if valid(txt) then
-            local expected=self.slots[i] and DIGITS[i].."+" or DIGITS[i]
-            if self.slots[i] or i>=5 then
+            local stored=self.slots[i]~=nil
+            local expected=stored and DIGITS[i].."+" or DIGITS[i]
+            if stored or self.marked[i] or i>=5 then
                 local existing
                 pcall(function()
                     local v=txt:GetText()
@@ -537,12 +542,27 @@ function M:refreshUI(pc)
                     local v=ftext(expected)
                     if v then pcall(function() txt:SetText(v) end) end
                 end
-                if self.slots[i] then
+                local image=get(icon,"InputIconWidget")
+                if stored then
+                    if not self.marked[i] and valid(image) then
+                        local original
+                        pcall(function() original=image:GetVisibility() end)
+                        self.marked[i]={originalVisibility=original}
+                    elseif not self.marked[i] then
+                        self.marked[i]={}
+                    end
                     pcall(function() txt:SetVisibility(0) end)
-                    local image=get(icon,"InputIconWidget")
                     if valid(image) then
                         pcall(function() image:SetVisibility(2) end)
                     end
+                elseif self.marked[i] then
+                    if i<=4 and valid(image) then
+                        local original=self.marked[i].originalVisibility
+                        if original~=nil then
+                            pcall(function() image:SetVisibility(original) end)
+                        end
+                    end
+                    self.marked[i]=nil
                 end
             end
         end
