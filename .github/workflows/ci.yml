@@ -17,7 +17,7 @@ jobs:
           find ue4ss/Mods -type f -name '*.lua' -print0 | xargs -0 -n 1 luac5.4 -p
           find tests -type f -name '*.lua' -print0 | xargs -0 -n 1 luac5.4 -p
       - name: Mock tests (not game tests)
-        run: lua5.4 tests/test_quickjunk.lua
+        run: for script in tests/test_*.lua; do lua5.4 "$script"; done
       - name: Build UE4SS mod ZIP
         run: |
           mkdir -p dist
