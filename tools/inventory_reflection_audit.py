@@ -39,3 +39,24 @@ for line in txt.splitlines():
     elif line.startswith("[") and "Property " in line and any(p in line for p in prefixes):
         target=line.lower()
         if any(p in target for p in patterns): print(line[:300])
+
+print("\nEXTRA INVENTORY MODEL RENDERING DETAILS")
+for key in ("HeldenEquipableItem", "HeldenCharacter","HeldenPlayerController","HeldenInventroySlotSetting",
+            "HeldenInventorySlotComponent","HeldenRangedWeapon","HeldenMeleeWeapon",
+            "HeldenItemtSlot","HeldenEquipedItem","HeldenItemSlot"):
+    v=data["structs"].get(key)
+    if v:
+        props=v.get("properties",[])
+        keep=("item","slot","equip","mesh","render","attach","visible","current","active","select","inventory","socket","hand","weapon","holster")
+        if key in ("HeldenEquipableItem","HeldenInventroySlotSetting","HeldenInventorySlotComponent"):
+            selected=props
+        else:
+            selected=[q for q in props if any(w in q["name"].lower() for w in keep)]
+        print(key, "parent=",v.get("parent"), "selected=",json.dumps(selected,ensure_ascii=False)[:22000])
+print("\nEQUIP ITEM METHODS")
+keys2=("/Script/Helden.HeldenEquipableItem:", "/Script/Helden.HeldenInventorySlotComponent:",
+       "/Script/Helden.HeldenRangedWeapon:", "/Script/Helden.HeldenCharacter:")
+for line in txt.splitlines():
+    if "Function " in line and any(k in line for k in keys2):
+        if any(term in line.lower() for term in ("equip","slot","attach","detach","hide","visible","item","holster","activate","select","inventory","bind")):
+            print(line[:300])
