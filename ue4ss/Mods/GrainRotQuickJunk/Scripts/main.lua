@@ -115,6 +115,14 @@ if hasActors and session.bank and type(actorsModule)=="table" then
 else
     log("ERROR: actor storage unavailable: "..tostring(actorsModule))
 end
+local hasNative,nativeModule=pcall(require,"native_slots")
+if hasNative and type(nativeModule)=="table" then
+    session.native=nativeModule
+    session.native.setLogger(log)
+    session.nativeAttempts={}
+else
+    log("ERROR: native inventory extension unavailable: "..tostring(nativeModule))
+end
 local function hostFor(world)
     for _,class in ipairs({"HeldenGameMode","GameModeBase"}) do
         for _,gm in ipairs(all(class)) do
@@ -186,6 +194,24 @@ local function poll()
                     local host=hostFor(world)
                     if host then
                         local key=full(pawn)
+                        -- One bounded attempt per real player to create six native
+                        -- slots; don't keep appending to actor arrays every frame.
+                        if session.native then
+                            local tries=session.nativeAttempts[key] or 0
+                            if tries<4 then
+                                local extended,reason=session.native.extend(pawn)
+                                if tries==3 and reason=="native_slots_not_created" then
+                                    local done,msg=session.native.rebuildMissing(pawn)
+                                    log("NATIVE slot component rebuild="..tostring(done)..": "..tostring(msg))
+                                end
+                                session.nativeAttempts[key]=tries+1
+                            end
+                        end
+                        local state=get(pawn,"CharacterState")
+                        if session.storage and session.bank and session.bank:count()>0
+                            and (tonumber(state)==1 or tostring(state):find("Dead",1,true)) then
+                            session.storage:recoverAll(pawn,"player_death")
+                        end
                         local inside=inElevator(pawn,elevators,world)
                         if inside and session.inside[key]~=true then
                             session.inside[key]=true
@@ -263,7 +289,23 @@ local function onInput(action,source)
                 " result="..tostring(result))
         end
     elseif action:find("quick_",1,true)==1 then
-        log("QUICK "..action:sub(7).."/10 pressed; game native slots unchanged")
+        local slot=tonumber(action:sub(7))
+        local pawn=localPawn()
+        local pc
+        if pawn then
+            for _,candidate in ipairs(all("HeldenPlayerController")) do
+                local p
+                pcall(function() p=candidate:GetPawn() end)
+                if valid(p) and full(p)==full(pawn) then pc=candidate;break end
+            end
+        end
+        if not session.native then
+            log("QUICK "..tostring(slot).." unavailable: native module missing")
+        else
+            local success,reason=session.native.select(pc,pawn,slot)
+            log("QUICK "..tostring(slot).." native select="..tostring(success)..
+                " outcome="..tostring(reason))
+        end
     end
 end
 local function queueInput(action,source)
@@ -350,4 +392,4 @@ else
     if ok then log("fallback sampled animation heartbeat active")
     else log("NO POLLER: "..tostring(err)) end
 end
-log("v0.1.0-alpha loaded. Elevator refill experimental; inventory and HUD read-only.")
+log("v0.2.0-experimental loaded; host actor Junk storage enabled, 10-slot native extension attempted; LIVE GAME validation required.")
