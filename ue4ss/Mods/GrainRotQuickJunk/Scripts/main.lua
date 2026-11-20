@@ -136,6 +136,12 @@ if hasInput and type(inputModule)=="table" then
 else
     log("ERROR: native inventory input calibration unavailable: "..tostring(inputModule))
 end
+local hasQuickUI,quickUIModule=pcall(require,"quickbar_ui")
+if hasQuickUI and type(quickUIModule)=="table" then
+    session.quickUI=quickUIModule
+else
+    log("ERROR: native quickbar UI module unavailable: "..tostring(quickUIModule))
+end
 local hasContext,contextModule=pcall(require,"player_context")
 if hasContext and type(contextModule)=="table" then
     session.context=contextModule
@@ -221,6 +227,8 @@ local function poll()
                         session.overlapError=false
                         session.nativeAttempts={}
                         if session.hud then session.hud.reset() end
+                        if session.quickUI then session.quickUI.reset() end
+                        session.quickUiStatus={}
                         if session.input then session.input.reset() end
                     end
                     if session.hud then
@@ -259,6 +267,26 @@ local function poll()
                                     log("NATIVE slot component rebuild="..tostring(done)..": "..tostring(msg))
                                 end
                                 session.nativeAttempts[key]=tries+1
+                            end
+                        end
+                        -- Only render the 6 additional native UI widgets after
+                        -- the real reflected ItemSlots array contains 10 entries.
+                        if session.quickUI then
+                            local slotArray=get(pawn,"ItemSlots")
+                            local n=0
+                            pcall(function() n=#slotArray end)
+                            if n>=10 then
+                                local localPc=false
+                                pcall(function() localPc=pc:IsLocalController() end)
+                                if localPc then
+                                    local ready,result=session.quickUI.ensure(pc,pawn,log)
+                                    if session.quickUiStatus==nil then session.quickUiStatus={} end
+                                    if session.quickUiStatus[key]~=result then
+                                        log("QUICK UI ready="..tostring(ready)..
+                                            " result="..tostring(result))
+                                        session.quickUiStatus[key]=result
+                                    end
+                                end
                             end
                         end
                         local state=get(pawn,"CharacterState")
