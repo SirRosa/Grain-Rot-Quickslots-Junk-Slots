@@ -11,6 +11,7 @@ local DIGITS={"1","2","3","4","5","6","7","8","9","0"}
 local cache={}
 local fallback=nil
 local fallbackChecked=false
+local fallbackKind=nil
 local function valid(o)
     if not o then return false end
     local ok,b=pcall(function() return o:IsValid() end)
@@ -92,7 +93,7 @@ local function itemTexture(actor)
     return nil
 end
 local function fallbackTexture()
-    if fallbackChecked then return fallback end
+    if fallbackChecked then return fallback,fallbackKind end
     fallbackChecked=true
     -- Native UI item textures with "coin", "gold" or "money" identifiers
     -- make a sensible generic junk icon, avoiding expensive 3D capture.
@@ -113,7 +114,8 @@ local function fallbackTexture()
             local tex=get(a,"Icon")
             if valid(tex) then
                 fallback=tex
-                return fallback
+                fallbackKind="money_item_icon"
+                return fallback,fallbackKind
             end
         end
     end
@@ -122,9 +124,12 @@ local function fallbackTexture()
     if type(StaticFindObject)=="function" then
         local ok,tex=pcall(StaticFindObject,
             "/Engine/EngineResources/DefaultTexture.DefaultTexture")
-        if ok and valid(tex) then fallback=tex end
+        if ok and valid(tex) then
+            fallback=tex
+            fallbackKind="engine_default_texture"
+        end
     end
-    return fallback
+    return fallback,fallbackKind
 end
 local function text(s)
     if not FText then return nil end
@@ -158,7 +163,10 @@ local function paint(slot,entry,pc)
     local key=objName(widget) or tostring(widget)
     local actor=entry and entry.actor
     local tex,source=itemTexture(actor)
-    if not tex then tex=fallbackTexture();source=tex and "generic_currency" or "text_currency" end
+    if not tex then
+        tex,source=fallbackTexture()
+        if not tex then source="text_currency" end
+    end
     local mark=entry and (entry.state=="held" and "*" or "+") or "?"
     local targetLabel=DIGITS[slot]..mark
     local before=cache[slot]
@@ -194,7 +202,8 @@ local function paint(slot,entry,pc)
     pcall(function() img:SetRenderOpacity(1) end)
     -- [$] is deliberately a recognisable money/junk fallback, not a
     -- fabricated blueprint item thumbnail.
-    if not valid(tex) and entry then
+    if entry and (not valid(tex) or
+        source=="engine_default_texture") then
         targetLabel=DIGITS[slot].."[$]"
     end
     local ok=changeLabel(label,targetLabel)
@@ -265,6 +274,7 @@ function M.reset()
     cache={}
     fallback=nil
     fallbackChecked=false
+    fallbackKind=nil
 end
 M.iconForActor=itemTexture
 M.getWidget=getWidget
