@@ -378,7 +378,7 @@ local function poll()
                                     -- still-unresolved saved quickslot.
                                     if not session.physicsSave.scope or
                                         session.pollCount%8==0 then
-                                        session.physicsSave:poll(pawn,session.persistSave)
+                                        session.physicsSave:poll(pawn,session.persistSave,pc)
                                     end
                                     -- Do not wait for next autosave after
                                     -- committing a native RMB release.
