@@ -1,8 +1,18 @@
 # Grain Rot — Quickslots / Junk Slots
 
-**v0.2.1-contextfix** — poprawka oparta na prawdziwym logu UE4SS(5): odnajdywanie BP postaci / LastPlayerChar, weryfikacja natywnych tablic dokładnie w UE4SS 3.0.1 (`1c1a1497`), ponawianie rozszerzenia rzeczywistych slotów oraz budowa paska UI z oryginalnych widgetów gry. **Wciąż wymaga testu w grze — zielony CI nie oznacza, że sloty rzeczywiście się pojawiają.**
+**v0.2.2-safetyfix** — poprawka oparta na prawdziwym logu UE4SS(5): odnajdywanie BP postaci / LastPlayerChar, weryfikacja natywnych tablic dokładnie w UE4SS 3.0.1 (`1c1a1497`), ponawianie rozszerzenia rzeczywistych slotów oraz budowa paska UI z oryginalnych widgetów gry. **Wciąż wymaga testu w grze — zielony CI nie oznacza, że sloty rzeczywiście się pojawiają.**
 
 [Szczegółowe ustalenia z logu](docs/UE4SS5-REAL-LOG-ROOT-CAUSE.md).
+
+## Poprawki 0.2.2 z rzeczywistego UE4SS(6).log
+
+- **Klawiatura 5–0:** w źródłowym ObjectDump potwierdzono `HeldenPlayerController.InventoryAction_Server(InIdx: int)`. Poprawiono wysyłanie dokładnego indeksu 0-based zamiast oczekiwania na zgadywaną sygnaturę i przechwytywania klawiszy 1–4.
+- **Widoczność:** nowe sloty mają teraz swoje `InputIcon.InputKeyText` ustawiane jawnie przez `FText("5")`, ..., `FText("0")` oraz `InputKey` zamiast domyślnego niezrozumiałego skrótu (np. Ctrl). Prawy dolny HUD pokazuje `J1–J10`.
+- **Fatal Error przy M4/M5/G/H:** zrezygnowano z wykonywania surowych operacji `GrabPhysHandle.ReleaseComponent`, zapisu `PhysGrabData.Target=nil` oraz `K2_AttachToActor` / `K2_DetachFromActor` na przedmiocie nadal trzymanym ramionami. To były ryzykowne operacje w v0.2.1; log kończy się bez stosu natywnej awarii, więc nie ma pewności, która konkretnie ją wywołała.
+- **Nowa procedura Junk Slot:** podczas trzymania PPM naciśnij **M4 lub G**, a następnie **puść PPM**. Gra sama zwolni przedmiot. Po dwóch odczytach stanu (ok. 1 sekunda) mod bezpieczniej ukryje **oryginalny aktor**. **M5 lub H** przywraca go przed postacią, pod warunkiem że nie trzymasz ramionami kolejnego obiektu. To kompromis w testowej wersji, by nie ingerować w natywny uchwyt fizyki.
+- **Ograniczenie:** przedmioty są przechowywane tylko podczas bieżącej sesji i mogą zostać utracone po zmianie mapy lub wyjściu z gry. Najpierw testuj na bezwartościowym przedmiocie i kopii save'a.
+
+**GitHub Actions sprawdza składnię i mocki, nie potwierdza braku Fatal Error w samej grze.**
 
 ## Funkcje
 
@@ -11,8 +21,8 @@
 | 10 Quickslotów (`1–0`) | Próba rozszerzenia `InventorySettings.SlotSettings` z 4 do 10 i stworzenia brakujących `HeldenInventorySlotComponent` / `ItemSlots`. Gra musi zaakceptować nowe obiekty oraz ich replikację; UI próbuje dobudować 6 oryginalnych slotów dopiero po potwierdzeniu 10 rzeczywistych miejsc. W grze nadal niezweryfikowane. |
 | Klawisze `5–0` | Najpierw korzystają z natywnego `InventoryAction_Server` tylko jeśli rozpoznano bezpieczną sygnaturę. Alternatywnie mod uczy się jej po kolejnych naciśnięciach `1`, `2`, `3` (te trzy klawisze nie zmieniają natywnego działania). |
 | Junk Slots, 10 aktorów | Nowa logika host-only chowa rzeczywisty, podniesiony fizyką `HeldenPhysicsActor` do niewidocznego stanu przyczepionego do postaci. Nie usuwa ani nie tworzy kopii aktora. |
-| Mouse4/G | Próba schowania aktualnie trzymanego ramionami obiektu `PhysGrabData.Target`. Bez potwierdzenia odczepienia/ukrycia operacja jest odrzucana. |
-| Mouse5/H | Odłącza wybrany aktor, przywraca kolizję, fizykę, widoczność, pojawia się przed postacią. Wyciągnięcie **nie chwyta automatycznie** obiektu ramionami. |
+| Mouse4/G | Kolejkuje bezpieczniejsze schowanie aktualnie trzymanego ramionami obiektu po puszczeniu PPM `PhysGrabData.Target`. Bez potwierdzenia odczepienia/ukrycia operacja jest odrzucana. |
+| Mouse5/H | Przywraca kolizję, fizykę, widoczność, pojawia się przed postacią. Wyciągnięcie **nie chwyta automatycznie** obiektu ramionami. |
 | `<`, `>` | Zmiana wybranego Junk Slotu (Shift+, / Shift+.). |
 | Jeden slot HUD | Tworzony jest przez `WidgetBlueprintLibrary` z oryginalnej klasy `SlotWidgetClass` i umieszczany w prawym dolnym rogu. Nie ma jeszcze potwierdzonego powiązania grafiki przedmiotu z fizycznym lootem. |
 | Winda i broń palna | Na hostcie przy wejściu do `InteriorCollisionBox` uzupełnia `HeldenRangedWeapon.ItemDurability` do `ItemDurabilityMax`. |
