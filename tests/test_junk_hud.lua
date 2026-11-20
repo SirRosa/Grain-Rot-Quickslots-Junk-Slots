@@ -5,7 +5,20 @@ local function validObj()
     function o:IsValid() return true end
     return o
 end
+FText=setmetatable({},{__call=function(_,s)
+    return {ToString=function() return s end}
+end})
 local widget=validObj()
+local icon=validObj()
+local label=validObj()
+function label:GetText() return self.text end
+function label:SetText(t) self.text=t end
+function label:SetVisibility(v) self.visible=v end
+local pic=validObj()
+function pic:SetVisibility(v) self.visible=v end
+icon.InputKeyText=label
+icon.InputIconWidget=pic
+widget.InputIcon=icon
 function widget:AddToViewport(layer) self.layer=layer end
 function widget:SetDesiredSizeInViewport(size) self.size=size end
 function widget:SetAlignmentInViewport(v) self.alignment=v end
@@ -30,9 +43,12 @@ inv.SlotWidgetClass=slotClass
 local pc=validObj()
 function pc:GetHUD() return {PlayerHudWidget={InventoryWidget=inv}} end
 assert(hud.ensure(pc))
+assert(label.text:ToString()=="J1")
+assert(hud.update(10))
+assert(label.text:ToString()=="J10" and pic.visible==2)
 assert(widget.layer==98 and widget.anchors.Maximum.X==1)
 assert(widget.position.X==-24 and widget.visibility==4 and widget.size.X==72)
 assert(hud.ensure(pc) and created==1,"only one junk HUD slot per local client")
 hud.reset()
 assert(widget.removed)
-io.write("PASS: native UMG slot widget creation, anchored bottom-right, no duplicate overlays\n")
+io.write("PASS: native Junk HUD with J1-J10 text, anchored bottom-right, no duplicate overlays\n")
