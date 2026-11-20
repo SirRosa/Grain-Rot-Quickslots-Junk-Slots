@@ -91,7 +91,7 @@ end
 local BP_ASSET="/Game/Gameplay/Character/BP_HeldenPlayerCharacter_01.BP_HeldenPlayerCharacter_01"
 local BP_CDO=BP_ASSET:sub(1,BP_ASSET:find("%.")-1)..".Default__BP_HeldenPlayerCharacter_01_C"
 local defaultAttempted={}
-function M.extendDefaults()
+function M.extendDefaults(forceLoad)
     if type(StaticFindObject)~="function" then return false,"StaticFindObject_missing" end
     local function lookup(path)
         local ok,obj=pcall(StaticFindObject,path)
@@ -99,7 +99,7 @@ function M.extendDefaults()
         return nil
     end
     local defaults=lookup(BP_CDO)
-    if not defaults and type(LoadAsset)=="function" and not defaultAttempted.load then
+    if not defaults and type(LoadAsset)=="function" and (forceLoad or not defaultAttempted.load) then
         -- Load once; do not force-load the Blueprint on every 500ms poll.
         defaultAttempted.load=true
         pcall(LoadAsset,BP_ASSET)
