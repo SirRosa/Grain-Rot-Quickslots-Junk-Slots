@@ -1,0 +1,30 @@
+name: Lua tests and installable artifact
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.4
+        run: sudo apt-get update && sudo apt-get install -y lua5.4
+      - name: Check syntax
+        run: |
+          find ue4ss/Mods -type f -name '*.lua' -print0 | xargs -0 -n 1 luac5.4 -p
+          find tests -type f -name '*.lua' -print0 | xargs -0 -n 1 luac5.4 -p
+      - name: Mock tests (not game tests)
+        run: lua5.4 tests/test_quickjunk.lua
+      - name: Build UE4SS mod ZIP
+        run: |
+          mkdir -p dist
+          cd ue4ss/Mods
+          zip -qr ../../dist/GrainRotQuickJunk-v0.1.0-alpha.zip GrainRotQuickJunk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GrainRotQuickJunk-v0.1.0-alpha
+          path: dist/GrainRotQuickJunk-v0.1.0-alpha.zip
+          if-no-files-found: error
