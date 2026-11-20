@@ -1,8 +1,24 @@
 # Grain Rot — Quickslots / Junk Slots
 
-**v0.2.4-visibility-perf** — poprawka oparta na prawdziwym logu UE4SS(5): odnajdywanie BP postaci / LastPlayerChar, weryfikacja natywnych tablic dokładnie w UE4SS 3.0.1 (`1c1a1497`), ponawianie rozszerzenia rzeczywistych slotów oraz budowa paska UI z oryginalnych widgetów gry. **Wciąż wymaga testu w grze — zielony CI nie oznacza, że sloty rzeczywiście się pojawiają.**
+**v0.2.5-compat-persistence** — poprawka oparta na prawdziwym logu UE4SS(5): odnajdywanie BP postaci / LastPlayerChar, weryfikacja natywnych tablic dokładnie w UE4SS 3.0.1 (`1c1a1497`), ponawianie rozszerzenia rzeczywistych slotów oraz budowa paska UI z oryginalnych widgetów gry. **Wciąż wymaga testu w grze — zielony CI nie oznacza, że sloty rzeczywiście się pojawiają.**
 
 [Szczegółowe ustalenia z logu](docs/UE4SS5-REAL-LOG-ROOT-CAUSE.md).
+
+## Poprawka 0.2.5 — zapisywanie slotów 5–0 i zgodność z respawnem
+
+**Wyniki analizy rzeczywistych danych gry:**
+
+- `HeldenSaveGame.ItemSaveData` jest mapą rekordów `HeldenItemSaveData`, z polami `OwningPlayer` i **`OwningSlot` (FName)**. Silnik odtwarza przedmioty przez nazwy slotów, a nie wyłącznie numery ekwipunku.
+- Poprzedni mod rozszerzał `InventorySettings.SlotSettings` dopiero na żywej postaci po starcie gry; nowa postać po respawnie / restarcie mogła podczas natywnego ładowania nadal posiadać 4 sloty.
+- Teraz mod w pierwszej kolejności ładuje klasę `/Game/Gameplay/Character/BP_HeldenPlayerCharacter_01` i rozszerza jej **Blueprint Class Default Object**, z dokładnymi nazwami `GrainRotQuick5` – `GrainRotQuick10`. Ponawia to przed natywnym `LoadGame` oraz `RespawnCharacter_Server`. Pozostawia cudze układy 10-slotowe bez zmian.
+- Dodano plik kopii informacji o dodatkowych przedmiotach, powiązany z numerem zapisu i `MetaData.SaveSlotName`: `%LOCALAPPDATA%\\Helden\\Saved\\GrainRotQuickJunk_slot<N>_host.txt`. Przechowuje unikalne `DynamicSaveName`, slot, klasę, asset przedmiotu, trwałość i zaklęcie. Uzupełnia go podczas gry i przy natywnym zakończeniu zapisu.
+- Podczas respawnu najpierw próbuje odzyskać **oryginalne istniejące aktory** przez `Interact`, a następnie przywrócić dokładny slot `5–0`. Podczas ładowania zapisu szuka najpierw aktorów o zgodnym `DynamicSaveName`, a dopiero po kilku odczytach próbuje pojedynczego awaryjnego utworzenia brakującego obiektu. Jeśli operacja się nie powiedzie, pozostawia zapisaną kopię danych i loguje przyczynę.
+- `ExpeditionSaver 0.5.1` nie uznaje już przydziału do błędnego slotu za pełne odzyskanie. Czeka na 10 komponentów i weryfikuje `CurrentSlot` + `CurrentInventorySlot`.
+- `GrainRotQOL 0.1.2` wykrywa włączony `ExpeditionSaver` i nie wykonuje drugiego ubezpieczenia przedmiotów, dzięki czemu ogranicza ryzyko duplikacji.
+
+**Instalacja:** zalecany zestaw z aktualizacjami `GrainRotQuickJunk 0.2.5`, `ExpeditionSaver 0.5.1` i `GrainRotQOL 0.1.2`. Nie instaluj dwóch kopii tych samych modów. `DepthKeeper` nie powinien działać równocześnie z `ExpeditionSaver`, ponieważ oba mody kontrolują głębokość.
+
+**Ograniczenia:** testy GitHub Actions obejmują mocki odrodzenia, odczytu pliku, niepowtarzania aktorów i odtworzenia pierwotnego indeksu; nie obejmują realnej kolejności zapisu/ładowania UE5.7. Kompletna trwałość zapisu i brak duplikacji wymaga osobnego testu w grze, na kopii zapisu. Obecna kopia pomocnicza dotyczy ekwipunku **lokalnego hosta**; odtwarzanie ekwipunku innych graczy w coop nie jest jeszcze potwierdzone.
 
 ## Poprawka 0.2.4 — niewidoczne schowane przedmioty i ograniczenie laga
 
