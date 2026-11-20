@@ -60,7 +60,7 @@ for _,k in ipairs({5,6,71,72,188,190,53,54,55,56,57,48}) do
     assert(type(binds[k])=="function","missing keybind "..k)
 end
 for _,k in ipairs({49,50,51,52}) do
-    assert(type(binds[k])=="function","1-4 should be read-only calibration markers")
+    assert(binds[k]==nil,"native 1-4 keys must not be intercepted")
 end
 poller()
 assert(gun.ItemDurability==3,"must not repair outside lift")
