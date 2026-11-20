@@ -83,6 +83,71 @@ local function makeTemplate(src)
         RelativeTransform={Rotation=quat,Translation=pos,Scale3D=scale},
     }
 end
+-- Keep the playable Blueprint's class default inventory at 10 *before*
+-- character creation. Native SaveGame.ItemSaveData uses OwningSlot (FName)
+-- and instantiates the owning pawn using its Blueprint CDO.
+-- Extending only live ItemSlots after BeginPlay is too late for native save
+-- and respawn deserialization. Never touch ItemSlots on the class defaults.
+local BP_ASSET="/Game/Gameplay/Character/BP_HeldenPlayerCharacter_01.BP_HeldenPlayerCharacter_01"
+local BP_CDO=BP_ASSET:sub(1,BP_ASSET:find("%.")-1)..".Default__BP_HeldenPlayerCharacter_01_C"
+local defaultAttempted={}
+function M.extendDefaults()
+    if type(StaticFindObject)~="function" then return false,"StaticFindObject_missing" end
+    local function lookup(path)
+        local ok,obj=pcall(StaticFindObject,path)
+        if ok and valid(obj) then return obj end
+        return nil
+    end
+    local defaults=lookup(BP_CDO)
+    if not defaults and type(LoadAsset)=="function" and not defaultAttempted.load then
+        -- Load once; do not force-load the Blueprint on every 500ms poll.
+        defaultAttempted.load=true
+        pcall(LoadAsset,BP_ASSET)
+        defaults=lookup(BP_CDO)
+    end
+    if not defaults then
+        return false,"player_blueprint_CDO_not_loaded"
+    end
+    local settings=get(get(defaults,"InventorySettings"),"SlotSettings")
+    local n=arrayLen(settings)
+    if n==10 then return true,"CDO_10_ready" end
+    if n~=4 then
+        return false,"CDO_unexpected_settings_"..tostring(n)
+    end
+    local existing=get(settings,4)
+    local snapshot=existing and makeTemplate(existing)
+    if not snapshot then return false,"CDO_template_unavailable" end
+    local firstFour={}
+    for i=1,4 do
+        firstFour[i]=enumString(get(get(settings,i),"SlotName"))
+    end
+    local entries={}
+    for i=5,10 do
+        local name=makeName(i)
+        if not name then return false,"CDO_name_failed_"..i end
+        entries[i]={SlotName=name,Socket=snapshot.Socket,
+            RelativeTransform=snapshot.RelativeTransform}
+    end
+    for i=5,10 do
+        local ok,reason=safeAppend(settings,entries[i])
+        if not ok then
+            warn("CDO APPEND failed "..i.." "..tostring(reason))
+            return false,"CDO_append_failed_"..i
+        end
+        local readback=get(settings,i)
+        if enumString(get(readback,"SlotName"))~="GrainRotQuick"..i then
+            return false,"CDO_readback_failed_"..i
+        end
+    end
+    for i=1,4 do
+        if enumString(get(get(settings,i),"SlotName"))~=firstFour[i] then
+            return false,"CDO_original_slot_changed"
+        end
+    end
+    warn("CDO PRESPAWN configured 10 slots (save/load and respawn use stable GrainRotQuick5-10 OwningSlot names)")
+    return true,"CDO_extended_to_10"
+end
+
 function M.extend(pawn)
     if not valid(pawn) then return false,"pawn_invalid" end
     local key=fullname(pawn)
