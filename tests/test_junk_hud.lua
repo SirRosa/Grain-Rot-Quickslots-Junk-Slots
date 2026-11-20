@@ -25,7 +25,8 @@ StaticFindObject=function(p)
 end
 local slotClass=validObj()
 slotClass.isSlot=true
-local inv={SlotWidgetClass=slotClass}
+local inv=validObj()
+inv.SlotWidgetClass=slotClass
 local pc=validObj()
 function pc:GetHUD() return {PlayerHudWidget={InventoryWidget=inv}} end
 assert(hud.ensure(pc))
