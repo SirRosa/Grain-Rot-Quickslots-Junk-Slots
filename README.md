@@ -1,12 +1,14 @@
 # Grain Rot — Quickslots / Junk Slots
 
-**v0.2.0-experimental** — kod faktycznie próbuje zmieniać ekwipunek, chować przedmioty i renderować slot HUD. **To nadal nie jest potwierdzony w grze, bezpieczny finalny mod.**
+**v0.2.1-contextfix** — poprawka oparta na prawdziwym logu UE4SS(5): odnajdywanie BP postaci / LastPlayerChar, weryfikacja natywnych tablic dokładnie w UE4SS 3.0.1 (`1c1a1497`), ponawianie rozszerzenia rzeczywistych slotów oraz budowa paska UI z oryginalnych widgetów gry. **Wciąż wymaga testu w grze — zielony CI nie oznacza, że sloty rzeczywiście się pojawiają.**
+
+[Szczegółowe ustalenia z logu](docs/UE4SS5-REAL-LOG-ROOT-CAUSE.md).
 
 ## Funkcje
 
 | Funkcja | Obecny stan |
 |---|---|
-| 10 Quickslotów (`1–0`) | Próba rozszerzenia `InventorySettings.SlotSettings` z 4 do 10 i stworzenia brakujących `HeldenInventorySlotComponent` / `ItemSlots`. Gra musi zaakceptować nową konfigurację; graficzne dodanie sześciu elementów paska NIE jest jeszcze potwierdzone. |
+| 10 Quickslotów (`1–0`) | Próba rozszerzenia `InventorySettings.SlotSettings` z 4 do 10 i stworzenia brakujących `HeldenInventorySlotComponent` / `ItemSlots`. Gra musi zaakceptować nowe obiekty oraz ich replikację; UI próbuje dobudować 6 oryginalnych slotów dopiero po potwierdzeniu 10 rzeczywistych miejsc. W grze nadal niezweryfikowane. |
 | Klawisze `5–0` | Najpierw korzystają z natywnego `InventoryAction_Server` tylko jeśli rozpoznano bezpieczną sygnaturę. Alternatywnie mod uczy się jej po kolejnych naciśnięciach `1`, `2`, `3` (te trzy klawisze nie zmieniają natywnego działania). |
 | Junk Slots, 10 aktorów | Nowa logika host-only chowa rzeczywisty, podniesiony fizyką `HeldenPhysicsActor` do niewidocznego stanu przyczepionego do postaci. Nie usuwa ani nie tworzy kopii aktora. |
 | Mouse4/G | Próba schowania aktualnie trzymanego ramionami obiektu `PhysGrabData.Target`. Bez potwierdzenia odczepienia/ukrycia operacja jest odrzucana. |
