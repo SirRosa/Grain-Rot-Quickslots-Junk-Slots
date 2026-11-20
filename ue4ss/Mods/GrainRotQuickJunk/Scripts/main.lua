@@ -103,6 +103,12 @@ local function refillGun(gun)
     return false
 end
 local session={inside={},world=nil,probedWorld=nil,junkIndex=1,probEvents=0,overlapError=false}
+local hasStore,storeModule=pcall(require,"junk_store")
+if hasStore and type(storeModule)=="table" and type(storeModule.new)=="function" then
+    session.bank=storeModule.new(10)
+else
+    log("Junk transaction module failed to load; controls remain diagnostic only")
+end
 local function hostFor(world)
     for _,class in ipairs({"HeldenGameMode","GameModeBase"}) do
         for _,gm in ipairs(all(class)) do
@@ -210,14 +216,28 @@ local function localPawn()
 end
 local function onInput(action,source)
     if action=="junk_prev" then
-        session.junkIndex=(session.junkIndex+8)%10+1
+        if session.bank then
+            session.bank:cycle(-1)
+            session.junkIndex=session.bank.selected
+        else
+            session.junkIndex=(session.junkIndex+8)%10+1
+        end
         log("JUNK preview: selected "..session.junkIndex.."/10; no item transferred")
     elseif action=="junk_next" then
-        session.junkIndex=session.junkIndex%10+1
+        if session.bank then
+            session.bank:cycle(1)
+            session.junkIndex=session.bank.selected
+        else
+            session.junkIndex=session.junkIndex%10+1
+        end
         log("JUNK preview: selected "..session.junkIndex.."/10; no item transferred")
     elseif action=="junk_put" then
         local pawn=localPawn()
         local grabbed=pawn and get(get(pawn,"PhysGrabData"),"Target")
+        if session.bank and valid(grabbed) then
+            local tx=session.bank:beginStore(full(grabbed),grabbed)
+            if tx then session.bank:cancel(tx) end -- never commit without native proof
+        end
         log("JUNK store requested by "..source.."; selected="..session.junkIndex..
             " target="..full(grabbed)..
             "; BLOCKED: native grab release + persistent storage not verified")
