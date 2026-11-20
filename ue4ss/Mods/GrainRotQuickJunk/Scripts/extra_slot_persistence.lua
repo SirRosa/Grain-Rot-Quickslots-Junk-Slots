@@ -264,6 +264,14 @@ function M.new(logger,opts)
         pendingKind=nil,pendingTicks=0,restoreAttempts={},
         spawned={},lastSaved=nil,ticks=0},M)
 end
+function M:resetWorld()
+    -- Do not carry potentially invalid UObject actor refs across map travel.
+    -- Keep the sidecar untouched and reload it on the new map.
+    self.scope=nil;self.lastPawn=nil;self.lastRows={}
+    self.pending=nil;self.pendingKind=nil;self.pendingTicks=0
+    self.restoreAttempts={};self.spawned={};self.lastSaved=nil
+end
+
 function M:fileFor(slot)
     local base=self.root or (os.getenv and os.getenv("LOCALAPPDATA"))
     if not base or base=="" then return nil end
