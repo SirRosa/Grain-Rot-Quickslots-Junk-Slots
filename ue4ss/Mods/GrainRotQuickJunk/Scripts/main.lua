@@ -238,14 +238,21 @@ local function queueInput(action,source)
         log("input ignored: ExecuteInGameThread unavailable")
     end
 end
-local function bind(keyName,action)
+local function bind(keyName,action,requiresShift)
     local k=type(Key)=="table" and Key[keyName] or nil
     if k==nil or type(RegisterKeyBind)~="function" then
         log("BIND unavailable: "..keyName)
         return
     end
     local ok,err=pcall(function()
-        RegisterKeyBind(k,function() queueInput(action,keyName) end)
+        if requiresShift then
+            if not ModifierKey or not ModifierKey.SHIFT then
+                error("UE4SS modifier SHIFT unavailable")
+            end
+            RegisterKeyBind(k,{ModifierKey.SHIFT},function() queueInput(action,keyName) end)
+        else
+            RegisterKeyBind(k,function() queueInput(action,keyName) end)
+        end
     end)
     if ok then log("BIND "..keyName.." => "..action)
     else log("BIND error "..keyName..": "..tostring(err)) end
@@ -254,8 +261,8 @@ bind("XBUTTON_ONE","junk_put")
 bind("XBUTTON_TWO","junk_take")
 bind("G","junk_put")
 bind("H","junk_take")
-bind("OEM_COMMA","junk_prev")
-bind("OEM_PERIOD","junk_next")
+bind("OEM_COMMA","junk_prev",true)
+bind("OEM_PERIOD","junk_next",true)
 for n,keyName in ipairs({"ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE","ZERO"}) do
     -- 1-4 remain native. Intercepting those would duplicate/conflict with base input.
     if n>=5 then bind(keyName,"quick_"..n) end
