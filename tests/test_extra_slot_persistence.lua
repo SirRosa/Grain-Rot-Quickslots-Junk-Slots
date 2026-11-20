@@ -122,5 +122,15 @@ for i=1,35 do m2:tick(pc,pawn4,save,world) end
 assert(spawns==1,"missing saved actor should be recreated only once")
 assert(#pawn4.EquipedItems==1 and pawn4.EquipedItems[1].CurrentInventorySlot==4)
 assert(pawn4.EquipedItems[1].ItemDurability==23)
+-- A user intentionally moves/drops the last extra-slot item and immediately
+-- saves: successful native save completion must write EMPTY, not resurrect it.
+pawn4.EquipedItems={}
+local saved,why=m2:checkpoint()
+assert(saved,"checkpoint after native save failed "..tostring(why))
+local emptyFile=assert(io.open(f,"rb"))
+local updated=emptyFile:read("*a");emptyFile:close()
+local emptyRows=P.parse(updated,73,"QA-Test-Slot",120)
+assert(emptyRows and #emptyRows==0,
+    "native save callback must persist clearing the last slot")
 os.remove(f);os.remove(f..".bak");os.remove(f..".tmp")
 io.write("PASS: save-scoped durable native slot5 manifest, death re-pickup and reload recovery, no duplicate spawns\n")
