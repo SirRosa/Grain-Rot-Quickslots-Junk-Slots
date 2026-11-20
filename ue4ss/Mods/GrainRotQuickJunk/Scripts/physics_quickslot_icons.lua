@@ -159,14 +159,21 @@ local function paint(slot,entry,pc)
         local oldBrush=get(img,"Brush")
         local oldVis
         pcall(function() oldVis=img:GetVisibility() end)
-        before={widget=key,icon=img,originalBrush=oldBrush,
-            originalVisibility=oldVis,identity=nil,texture=nil}
+        before={widget=key,icon=img,label=label,
+            originalLabel=labelValue(label),
+            originalBrush=oldBrush,originalVisibility=oldVis,
+            identity=nil,texture=nil}
         cache[slot]=before
     end
     local id=entry and entry.identity or "missing"
     if before.identity~=id or before.texture~=tex then
         if valid(tex) then
             local ok=pcall(function() img:SetBrushFromTexture(tex,false) end)
+            if not ok then
+                -- Supports UTextureRenderTarget2D and other valid objects
+                -- that are not subclassed from UTexture2D.
+                ok=pcall(function() img:SetBrushResourceObject(tex) end)
+            end
             if not ok then tex=nil;source="text_currency" end
         end
         before.identity=id
@@ -224,6 +231,26 @@ function M.refresh(pc,physics)
     return true,"icons_synced"
 end
 function M.reset()
+    -- Same-world reload can reuse the inventory widget; do not leave old
+    -- furniture thumbnails visible after the physics storage was cleared.
+    for slot,previous in pairs(cache) do
+        local img=previous.icon
+        if valid(img) then
+            if previous.originalBrush~=nil then
+                pcall(function() img:SetBrush(previous.originalBrush) end)
+            else
+                pcall(function() img:SetBrushFromTexture(nil,false) end)
+            end
+            if previous.originalVisibility~=nil then
+                pcall(function() img:SetVisibility(previous.originalVisibility) end)
+            else
+                pcall(function() img:SetVisibility(2) end)
+            end
+        end
+        if valid(previous.label) and previous.originalLabel then
+            changeLabel(previous.label,previous.originalLabel)
+        end
+    end
     cache={}
     fallback=nil
     fallbackChecked=false
