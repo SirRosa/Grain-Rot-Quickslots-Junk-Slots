@@ -372,9 +372,21 @@ local function poll()
                                         log("[PERSIST] context="..tostring(status))
                                     end
                                 end
-                                if session.physicsSave and session.physics and
-                                    session.pollCount%8==0 then
-                                    session.physicsSave:poll(pawn,session.persistSave)
+                                if session.physicsSave and session.physics then
+                                    -- Read an existing manifest as soon as the
+                                    -- save is ready, before E can reuse a
+                                    -- still-unresolved saved quickslot.
+                                    if not session.physicsSave.scope or
+                                        session.pollCount%8==0 then
+                                        session.physicsSave:poll(pawn,session.persistSave)
+                                    end
+                                    -- Do not wait for next autosave after
+                                    -- committing a native RMB release.
+                                    if session.physics.saveDirty and
+                                        not session.physics.pending then
+                                        local saved=session.physicsSave:checkpoint(session.persistSave)
+                                        if saved then session.physics.saveDirty=false end
+                                    end
                                 end
                             end
                         end
@@ -582,7 +594,8 @@ if session.physics and type(RegisterHook)=="function" then
     local ok,err=pcall(function()
         RegisterHook("/Script/Helden.HeldenPlayerController:InventoryAction_Server",
             function() end,function(context,inIdx)
-                if session.physics:count()==0 then return end
+                if session.physics:count()==0 and
+                    next(session.physics.unresolvedSlots)==nil then return end
                 local function unwrap(a)
                     local ok,value=pcall(function() return a:get() end)
                     return ok and value or a
