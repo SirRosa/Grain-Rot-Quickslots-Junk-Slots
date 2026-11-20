@@ -164,7 +164,7 @@ session.defaultsReady=false
 local function ensureDefaultSlots(reason)
     if session.defaultsReady or not session.native or
         type(session.native.extendDefaults)~="function" then return end
-    local ok,why=session.native.extendDefaults()
+    local ok,why=session.native.extendDefaults(reason~="poll_retry")
     if ok then
         session.defaultsReady=true
         log("PRESPAWN CDO ready: "..tostring(why).." source="..tostring(reason))
