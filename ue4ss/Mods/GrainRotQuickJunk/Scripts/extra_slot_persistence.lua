@@ -129,6 +129,13 @@ local function toRecordTable(rows)
     for _,r in ipairs(rows) do t[r.dyn]=r end
     return t
 end
+local function saveInDungeon(save)
+    local mode=get(save,"GameState")
+    if tonumber(mode)==1 then return true end
+    local t=sval(mode)
+    return t~=nil and t:find("InDungeon",1,true)~=nil
+end
+
 local function isAlive(pawn)
     if not valid(pawn) then return false end
     local st=enum(get(pawn,"CharacterState"))
@@ -394,7 +401,8 @@ function M:tick(pc,pawn,save,world)
                 (self.restoreAttempts[id] or 0)<6 then
                 local actor=(valid(rec.ref) and rec.ref) or self.spawned[id] or seenActors[id]
                 if not actor and self.pendingKind=="reload" and
-                    self.pendingTicks>=6 and not self.spawned[id] then
+                    self.pendingTicks>=6 and not self.spawned[id] and
+                    not saveInDungeon(save) then
                     actor=spawnMissing(pawn,rec)
                     if valid(actor) then
                         self.spawned[id]=actor
