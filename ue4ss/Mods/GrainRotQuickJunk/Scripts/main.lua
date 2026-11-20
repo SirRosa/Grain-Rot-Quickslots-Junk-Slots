@@ -1,8 +1,8 @@
--- Grain Rot Quickslots & Junk Slots, v0.1.0-alpha.
+-- Grain Rot Quickslots & Junk Slots, v0.2.0-experimental.
 -- UE4SS 3.x, Helden UE 5.7. Source-driven research build.
--- IMPORTANT: This build only mutates firearm durability on elevator ENTRY.
--- 10-slot inventory/Junk UI are discovery-only until safe native inventory RPCs
--- and save/network semantics are proven. No item is hidden, moved or destroyed.
+-- EXPERIMENTAL: host-only actor storage mutates physics/visibility and native
+-- slot creation may be incompatible with current game saves. Back up saves.
+-- No actor is destroyed or cloned by this mod. Save/travel unverified.
 local CFG = {
     ElevatorRefill = true,
     PollMillis = 500,
