@@ -27,6 +27,6 @@ jobs:
           zip -qr ../../dist/GrainRotQuickJunk-v0.2.0-experimental.zip GrainRotQuickJunk
       - uses: actions/upload-artifact@v4
         with:
-          name: GrainRotQuickJunk-v0.1.0-alpha
-          path: dist/GrainRotQuickJunk-v0.1.0-alpha.zip
+          name: GrainRotQuickJunk-v0.2.0-experimental
+          path: dist/GrainRotQuickJunk-v0.2.0-experimental.zip
           if-no-files-found: error
