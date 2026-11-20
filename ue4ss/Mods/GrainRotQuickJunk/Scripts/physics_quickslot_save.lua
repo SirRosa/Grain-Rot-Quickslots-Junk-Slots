@@ -310,7 +310,7 @@ function M:poll(pawn,save)
             end
         end
         if valid(actor) and self.physics.isPhysicsActor(actor) and
-            self.physics.world(actor)==self.physics.world(pawn) then
+            self.physics.worldOf(actor)==self.physics.worldOf(pawn) then
             local held=read(read(pawn,"PhysGrabData"),"Target")
             if valid(held) and self.physics.name(held)==self.physics.name(actor) then
                 pending[#pending+1]=row
@@ -321,7 +321,7 @@ function M:poll(pawn,save)
                         slot=slot,actor=actor,identity=row.id,class=row.class,
                         asset=row.asset,originName=row.originName,
                         originalPosition=row.pos,originalRotation=row.rot,
-                        grab=row.grab,world=self.physics.world(pawn),
+                        grab=row.grab,world=self.physics.worldOf(pawn),
                         state="stored"}
                     self.physics.slots[slot]=entry
                     self.physics:signal()
