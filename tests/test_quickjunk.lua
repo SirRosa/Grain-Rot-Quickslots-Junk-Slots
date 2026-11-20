@@ -17,7 +17,11 @@ ExecuteInGameThread=function(cb) cb() end
 LoopInGameThreadWithDelay=function(ms,cb) assert(ms==500);poller=cb end
 
 local groups={}
-FindAllOf=function(name) return groups[name] or {} end
+local findCounts={}
+FindAllOf=function(name)
+    findCounts[name]=(findCounts[name] or 0)+1
+    return groups[name] or {}
+end
 local function object(class,name,world)
     local o={klass=class, fullName=name, world=world, alive=true}
     function o:IsValid() return self.alive end
@@ -58,6 +62,7 @@ groups.HeldenRangedWeapon={gun,gun2}
 groups.HeldenInventoryWidget={}
 assert(loadfile("ue4ss/Mods/GrainRotQuickJunk/Scripts/main.lua"))()
 assert(type(poller)=="function","poller not registered")
+local function pollN(n) for _=1,n do poller() end end
 for _,k in ipairs({5,6,71,72,188,190,53,54,55,56,57,48}) do
     assert(type(binds[k])=="function","missing keybind "..k)
 end
@@ -68,20 +73,30 @@ poller()
 assert(gun.ItemDurability==3,"must not repair outside lift")
 assert(gun2.ItemDurability==1,"world gun must not be repaired")
 inside=true
-poller()
+pollN(4)
 assert(gun.ItemDurability==12,"must repair on entry")
 assert(gun2.ItemDurability==1,"must not repair unrelated world gun")
 gun.ItemDurability=4
 poller()
 assert(gun.ItemDurability==4,"must not spam repairs while inside")
-inside=false;poller()
-inside=true;poller()
+inside=false;pollN(4)
+inside=true;pollN(4)
 assert(gun.ItemDurability==12,"must repair on re-entry")
 groups.HeldenGameMode={}
 gun.ItemDurability=2
-inside=false;poller();inside=true;poller()
+inside=false;pollN(4);inside=true;pollN(4)
 assert(gun.ItemDurability==2,"client must not mutate firearm durability")
 groups.HeldenGameMode={gm}
+-- Discovery should run on the first poll, then only once per ~2 seconds;
+-- previously FindAllOf on controller, GameMode and elevators ran every
+-- 500 ms, creating game-thread stalls and FPS drops.
+local oldCount=findCounts.HeldenPlayerController or 0
+local oldElev=findCounts.HeldenDungeonElevator or 0
+pollN(20)
+local newCount=(findCounts.HeldenPlayerController or 0)-oldCount
+local newElev=(findCounts.HeldenDungeonElevator or 0)-oldElev
+assert(newCount<=7 and newElev<=7,
+    "repeated full scans in poll loop would cause stutter")
 local before=gun2.ItemDurability
 binds[5]()
 binds[71]()
@@ -115,4 +130,4 @@ for _,s in ipairs(messages) do
     assert(not s:find("Junk transaction module failed",1,true),"junk model must load")
 end
 print=io.write
-print("PASS: key 5-0 selects 0-based 4-9 with nil GetPawn and LastPlayerChar, source actor safety and refill\n")
+print("PASS: true 5-0 input, cached controller/elevator discovery and 2s refill interval\n")
