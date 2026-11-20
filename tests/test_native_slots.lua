@@ -24,8 +24,13 @@ end
 FName=function(s) return tostring(s) end
 local xform={Rotation={X=0,Y=0,Z=0,W=1},
     Translation={X=0,Y=0,Z=0},Scale3D={X=1,Y=1,Z=1}}
-local settings={}
-local slots={}
+local function nativeArray()
+    local arr={}
+    function arr:Add(value) table.insert(self,value) end
+    return arr
+end
+local settings=nativeArray()
+local slots=nativeArray()
 for i=1,4 do
     settings[i]={Socket="None",SlotName="Quick"..i,RelativeTransform=xform}
     slots[i]={SlotName="Quick"..i,SlotComponent=obj("OriginalSlotComponent"..i)}
@@ -55,4 +60,19 @@ assert(pc.pressed==9,"native hotkey must send 0-based index")
 assert(mod.select(pc,pawn,5))
 assert(pc.pressed==4)
 assert(not mod.select(pc,pawn,11))
-io.write("PASS: native slot settings and components 4->10, readback, guarded server indexing\n")
+-- Actual UE4SS v3 TArray has no Add() method. Ensure this path cannot
+-- write outside the pre-existing native FScriptArray's bounds.
+local noBridgePawn=obj("HeldenCharacter /Game/NoNativeBridge")
+noBridgePawn.InventorySettings={SlotSettings={}}
+noBridgePawn.ItemSlots={{},{},{},{}}
+for i=1,4 do
+    noBridgePawn.InventorySettings.SlotSettings[i]={
+        Socket="None",SlotName="Quick"..i,RelativeTransform=xform
+    }
+end
+local before=#noBridgePawn.InventorySettings.SlotSettings
+local no,reason=mod.extend(noBridgePawn)
+assert(not no and reason=="requires_native_array_bridge")
+assert(#noBridgePawn.InventorySettings.SlotSettings==before,
+    "no out-of-bounds write should happen without native array bridge")
+io.write("PASS: safe append bridge, 4->10 mock slots, readback, no unsafe native TArray indexing\\n")
