@@ -162,9 +162,9 @@ for line in txt.splitlines():
         print("WBP FIELD",line[:350])
 print("\nWBP SLOT BP CLASS SERIALIZABLE STRUCT")
 for line in txt.splitlines():
-    if "/Game/UI/Inventory/WBP_InventorySlot.WBP_InventorySlot_C:" in line and
+    if ("/Game/UI/Inventory/WBP_InventorySlot.WBP_InventorySlot_C:" in line and
         any(q in line for q in ("ObjectProperty", "StructProperty", "IntProperty")) and
-        not "Function" in line:
+        "Function" not in line):
         print("BP FIELD",line[:330])
 print("\nCONSTRUCT ASSET GET ICON FUNCTIONS")
 for line in txt.splitlines():
