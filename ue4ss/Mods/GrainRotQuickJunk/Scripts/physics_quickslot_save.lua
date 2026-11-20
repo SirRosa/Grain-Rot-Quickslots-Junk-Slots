@@ -265,7 +265,7 @@ local function findExisting(rows,physics)
     end
     return found
 end
-function M:poll(pawn,save)
+function M:poll(pawn,save,pc)
     if not valid(pawn) or not valid(save) then
         return false,"no_player_or_save"
     end
@@ -328,6 +328,15 @@ function M:poll(pawn,save)
         end
         if valid(actor) and self.physics.isPhysicsActor(actor) and
             self.physics.worldOf(actor)==self.physics.worldOf(pawn) then
+            -- Reload must not make previously visible props disappear if
+            -- the local native quickbar has not yet spawned its Icon widget.
+            if pc then
+                local visible,reason=self.physics:canRenderSlot(pc,slot)
+                if not visible then
+                    pending[#pending+1]=row
+                    goto continue
+                end
+            end
             local held=read(read(pawn,"PhysGrabData"),"Target")
             if valid(held) and self.physics.name(held)==self.physics.name(actor) then
                 pending[#pending+1]=row
