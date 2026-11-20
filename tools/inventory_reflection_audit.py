@@ -134,3 +134,22 @@ for line in txt.splitlines():
     low=line.lower()
     if "function /script/umg.image:" in low and any(k in low for k in ("setbrushfrom","setbrush","setopacity")):
         print("UFUNCTION",line[:260])
+
+print("\nEXACT INVENTORY ICON FUNCTION PARAMS")
+lines=txt.splitlines()
+targetTokens=("HeldenInventorySlotWidget:OnSetupFromAsset",
+    "WBP_InventorySlot_C:OnSetupFromAsset",
+    "WBP_InventorySlot_C:SetupForValidAsset",
+    "WBP_InventorySlot_C:SetupForInvalidAsset",
+    "HeldenInventorySlotWidget:OnSetIsSelected")
+for idx,line in enumerate(lines):
+    if "Function " in line and any(t in line for t in targetTokens):
+        print("FUNCTION",line[:280])
+        for following in lines[idx+1:idx+24]:
+            if "Function " in following or "Class " in following: break
+            if "Property " in following or ":OnSetup" in following or ":SetupFor" in following or ":OnSet" in following:
+                print("  PARAM",following[:300])
+for key in data["structs"]:
+    if any(x in key for x in ("WBP_InventorySlot", "WBP_Item", "HeldenItemAsset", "HeldenConstructAsset",
+                              "WBP_Construct", "HeldenDataSingleton","HeldenPhysicsActor")):
+        print("SCHEMA",key,json.dumps(data["structs"][key],ensure_ascii=False)[:16000])
