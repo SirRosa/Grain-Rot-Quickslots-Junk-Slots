@@ -185,6 +185,13 @@ end
 function M:resetWorld()
     self.scope=nil;self.lastPayload=nil;self.unresolved={}
     self.scanCount=0;self.spawned={};self.lastError=nil
+    if self.physics then self.physics.unresolvedSlots={} end
+end
+local function markReserved(physics,rows)
+    local flags={}
+    for _,row in ipairs(rows) do flags[row.slot]=true end
+    physics.unresolvedSlots=flags
+    if #rows>0 then physics.changed=true end
 end
 function M:rows()
     local rows,used={},{}
@@ -277,6 +284,7 @@ function M:poll(pawn,save)
         elseif why~="manifest_missing" then
             self.log("[PHYS SAVE] manifest ignored: "..tostring(why))
         end
+        markReserved(self.physics,self.unresolved)
     else
         self.scope=scope
     end
@@ -291,11 +299,20 @@ function M:poll(pawn,save)
     for _,row in ipairs(self.unresolved) do
         local actor=found[row.id]
         local slot=row.slot
+        local alreadyStored=false
+        for i=1,10 do
+            local current=self.physics:get(i)
+            if current and current.identity==row.id then
+                alreadyStored=true;break
+            end
+        end
+        if alreadyStored then goto continue end
         if self.physics:hasSlot(slot) or native[slot] then
             -- Native item has priority over virtual physics reservation.
             local nextFree
             for i=1,10 do
-                if not native[i] and not self.physics:hasSlot(i) then
+                if not native[i] and not self.physics:hasSlot(i)
+                    and not self.physics.unresolvedSlots[i] then
                     local reserved=false
                     for _,r in ipairs(pending) do
                         if r.slot==i then reserved=true end
@@ -303,7 +320,7 @@ function M:poll(pawn,save)
                     if not reserved then nextFree=i;break end
                 end
             end
-            if nextFree then slot=nextFree
+            if nextFree then slot=nextFree;row.slot=slot
             else
                 pending[#pending+1]=row
                 goto continue
@@ -337,6 +354,7 @@ function M:poll(pawn,save)
         ::continue::
     end
     self.unresolved=pending
+    markReserved(self.physics,pending)
     return true,#pending==0 and "all_resolved" or ("missing_"..#pending)
 end
 M.serialize=serialize
