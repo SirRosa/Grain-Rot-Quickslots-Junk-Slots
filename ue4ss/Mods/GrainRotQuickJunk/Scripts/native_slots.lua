@@ -127,8 +127,8 @@ function M.extend(pawn)
         local ok,err=safeAppend(settings,entries[i])
         if not ok then
             state.blocked[key]=true
-            warn("TArray needs a native resize bridge at "..i..": "..tostring(err))
-            return false,"requires_native_array_bridge"
+            warn("UE4SS TArray indexed append failed at "..i..": "..tostring(err))
+            return false,"array_append_failed"
         end
         local entry=get(settings,i)
         if not entry or enumString(get(entry,"SlotName"))~="GrainRotQuick"..i then
@@ -189,7 +189,7 @@ function M.rebuildMissing(pawn)
         end
         local appended,appendError=safeAppend(items,{SlotName=name,SlotComponent=comp})
         if not appended then
-            warn("native ItemSlots needs a resize bridge at "..i..": "..tostring(appendError))
+            warn("UE4SS ItemSlots indexed append failed at "..i..": "..tostring(appendError))
             return false,"native_slot_append_failed"
         end
         local added=get(items,i)
