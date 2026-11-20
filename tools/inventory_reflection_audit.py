@@ -80,3 +80,10 @@ for line in txt.splitlines():
             "/Script/Helden.HeldenEquipableItem:")) and any(k in line.lower() for k in (
                  "save","load","equip","inventory","item","pickup","slot","spawn","respawn","interact","serialize")):
         print(line[:280])
+
+print("\nPLAYER BP CDO / CLASS DUMP")
+for line in txt.splitlines():
+    if any(k in line for k in ("Default__BP_HeldenPlayerCharacter", "BP_HeldenPlayerCharacter_01_C",
+                               "Default__HeldenCharacter", "Default__BP_HeldenCharacter")):
+        if any(word in line for word in ("Default__", "Class ", "InventorySettings", "ItemSlots")):
+            print(line[:350])
