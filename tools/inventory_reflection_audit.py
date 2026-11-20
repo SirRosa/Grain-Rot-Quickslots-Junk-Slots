@@ -64,3 +64,19 @@ for line in txt.splitlines():
 print("\nHOLSTER ENUM")
 for key in ("EHeldenItemHolsterState","EHeldenInputIconType"):
     print(key, json.dumps(data["enums"].get(key),ensure_ascii=False)[:6000])
+
+print("\nPERSISTENCE AND EQUIP REFLECTION")
+for name in ("HeldenSaveGame","HeldenItemSaveData","HeldenCharacterSaveData","HeldenPlayerSaveData",
+             "HeldenSaveGameMetaData","HeldenEquipableItem","HeldenCharacter","HeldenGameInstance",
+             "HeldenItemtSlot","HeldenInventroySlot","HeldenInventroySlotSetting"):
+    obj=data["structs"].get(name)
+    if obj:
+        print(name,json.dumps(obj,ensure_ascii=False)[:22000])
+print("\nSAVE AND EQUIP GAME FUNCTIONS")
+for line in txt.splitlines():
+    if "Function " in line and any(x in line for x in (
+            "/Script/Helden.HeldenSaveGame:", "/Script/Helden.HeldenGameInstance:",
+            "/Script/Helden.HeldenCharacter:", "/Script/Helden.HeldenPlayerController:",
+            "/Script/Helden.HeldenEquipableItem:")) and any(k in line.lower() for k in (
+                 "save","load","equip","inventory","item","pickup","slot","spawn","respawn","interact","serialize")):
+        print(line[:280])
