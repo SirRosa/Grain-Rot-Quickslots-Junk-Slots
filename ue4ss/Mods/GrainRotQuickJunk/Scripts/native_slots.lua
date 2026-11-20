@@ -35,28 +35,27 @@ end
 local function warn(s)
     state.log("[QUICK] "..s)
 end
--- UE4SS 3.x TArray.__newindex replaces an EXISTING element; it does not
--- resize the Unreal FScriptArray. Never write at #array + 1 directly: doing
--- so may access invalid memory. Use an explicit append bridge if present.
+-- Verified against installed UE4SS 3.0.1 commit 1c1a1497:
+-- LuaTArray.cpp:prepare_to_handle calls FScriptArray::AddZeroed on index
+-- >= Num, including __newindex. Only append exactly one element at #arr+1.
+-- The StructProperty pusher accepts a Lua table and copies its members.
 local function safeAppend(array,entry)
-    local ok,method=pcall(function() return array.Add end)
-    if not ok or type(method)~="function" then return false,"array_add_bridge_missing" end
     local before=arrayLen(array)
-    if before==nil then return false,"array_length_unavailable" end
-    local success,err=pcall(function() array:Add(entry) end)
-    if not success then return false,tostring(err) end
+    if before==nil or before<1 or before>=10 then
+        return false,"unexpected_array_length"
+    end
+    local ok,err=pcall(function() array[before+1]=entry end)
+    if not ok then return false,tostring(err) end
     if arrayLen(array)~=before+1 then return false,"array_length_unchanged" end
     return true,nil
 end
 local function makeName(i)
-    local name="GrainRotQuick"..i
-    -- UE4SS v3 FName() uses Find by default, so new names may resolve
-    -- to None. The native Kismet conversion adds them to the UE name pool.
-    if type(StaticFindObject)~="function" then return nil end
-    local ok,lib=pcall(StaticFindObject,"/Script/Engine.Default__KismetStringLibrary")
-    if not ok or not valid(lib) then return nil end
-    local fine,value=pcall(function() return lib:Conv_StringToName(name) end)
-    if fine and value and enumString(value)==name then return value end
+    if FName==nil then return nil end
+    local n="GrainRotQuick"..i
+    -- FName is a callable TABLE in UE4SS (not a Lua function). The Lua
+    -- constructor at this commit uses FNAME_Add by default.
+    local ok,v=pcall(FName,n)
+    if ok and v and enumString(v)==n then return v end
     return nil
 end
 local function makeTemplate(src)
@@ -65,7 +64,7 @@ local function makeTemplate(src)
     local q=get(t,"Rotation")
     local p=get(t,"Translation")
     local s=get(t,"Scale3D")
-    if not socket or not q or not p or not s or type(FName)~="function" then return nil end
+    if not socket or not q or not p or not s or FName==nil then return nil end
     local ok,socketName=pcall(FName,socket)
     if not ok or not socketName or enumString(socketName)~=socket then return nil end
     local function vec3(v)
