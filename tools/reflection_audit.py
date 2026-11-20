@@ -7,7 +7,7 @@ prefixes=("HeldenCharacter","HeldenEquipableItem","HeldenItemtSlot","HeldenRange
 "HeldenPlayerController","HeldenInventoryWidget","HeldenInventorySlotWidget",
 "HeldenPlayerHUDWidget","HeldenHUD","HeldenElevator","HeldenDungeonElevator",
 "HeldenInventroySlotSetting","HeldenInventorySlotComponent","HeldenPhysicsActor",
-"HeldenInteractableObject","HeldenPhysicsGrabData")
+"HeldenInteractableObject","HeldenPhysGrabData","HeldenInventroySettings","HeldenInventroySlot","HeldenItemSaveData","HeldenPhysGrabData")
 print("SCHEMA TARGET CLASSES")
 for k,v in db["structs"].items():
     if k in prefixes:
