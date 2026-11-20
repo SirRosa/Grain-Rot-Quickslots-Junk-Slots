@@ -532,6 +532,15 @@ function M:resolveNativeConflicts(pawn)
     return true
 end
 function M:resetWorld()
+    -- LoadGame can happen without unloading the current UWorld. Reveal any
+    -- old hidden actor before dropping its in-memory slot reference so the
+    -- user can always retrieve the real item with RMB if save recovery fails.
+    for slot,entry in pairs(self.slots) do
+        if entry and entry.state=="stored" and valid(entry.actor) then
+            reveal(entry.actor)
+            self.log("[PHYS] safe world reset: revealed old slot "..slot)
+        end
+    end
     self.pending=nil;self.active=nil;self.slots={}
     self.owner=nil;self.world=nil;self.queuedSelect=nil
     self.marked={}
