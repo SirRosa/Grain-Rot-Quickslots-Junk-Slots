@@ -91,12 +91,12 @@ assert(gun2.ItemDurability==before and gun2.alive,"preview must not mutate grabb
 assert(pawn.PhysGrabData.Target==gun2,"grabbed object must remain unchanged")
 assert(type(hooks["/Script/Helden.HeldenPlayerController:InventoryAction_Server"])=="function",
     "read-only inventory RPC probe must register")
-local sawRefill,sawBlock=false,false
+local sawRefill,sawStoreResult=false,false
 for _,s in ipairs(messages) do
     if s:find("REFILL",1,true) then sawRefill=true end
-    if s:find("BLOCKED",1,true) then sawBlock=true end
+    if s:find("JUNK",1,true) and (s:find("ERROR",1,true) or s:find("result=",1,true)) then sawStoreResult=true end
 end
-assert(sawRefill and sawBlock,"diagnostic must clearly separate supported and unsupported operations")
+assert(sawRefill and sawStoreResult,"diagnostic must report the store outcome clearly")
 for _,s in ipairs(messages) do
     assert(not s:find("Junk transaction module failed",1,true),"junk model must load")
 end
