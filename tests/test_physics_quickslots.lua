@@ -151,13 +151,27 @@ for i=1,10 do
     function t:GetText() return {ToString=function() return self.text end} end
     function t:SetText(v) self.text=v.value end
     function t:SetVisibility(_) end
-    ui.SlotWidgets[i]={InputIcon={InputKeyText=t}}
+    local icon={InputKeyText=t}
+    function icon:IsValid() return true end
+    local image={visibility=2}
+    function image:IsValid() return true end
+    function image:SetBrushFromTexture(tex) self.texture=tex end
+    function image:SetVisibility(v) self.visibility=v end
+    function image:GetVisibility() return self.visibility end
+    function image:SetRenderOpacity(v) self.opacity=v end
+    function image:SetBrush(v) self.brush=v end
+    ui.SlotWidgets[i]={InputIcon=icon,Icon=image}
     ui.SlotWidgets[i].IsValid=function() return true end
-    ui.SlotWidgets[i].InputIcon.IsValid=function() return true end
+    ui.SlotWidgets[i].GetFullName=function() return "WBP /Game/Test.Slot"..i end
 end
-FText=setmetatable({},{__call=function(_,value) return {value=value} end})
+FText=setmetatable({},{__call=function(_,value)
+    return {value=value,ToString=function(self) return self.value end}
+end})
 local pc=make("HeldenPlayerController","/Game/Test.PC",w)
-function pc:GetHUD() return {PlayerHudWidget={InventoryWidget=ui}} end
+local hud={PlayerHudWidget={InventoryWidget=ui}}
+function hud:IsValid() return true end
+function hud.PlayerHudWidget:IsValid() return true end
+function pc:GetHUD() return hud end
 -- First slot has a native item, so temporarily restore free physics slot2.
 pawn.EquipedItems={}
 qs.slots[2]={slot=2,actor=phys,grab=st.grab,identity="test",state="stored"}
