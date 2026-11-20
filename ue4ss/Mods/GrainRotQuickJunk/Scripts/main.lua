@@ -502,39 +502,52 @@ local function onInput(action,source)
             log("[PHYS] E ignored: physics module missing")
             return
         end
-        local ok,result=session.physics:requestStore(pawn)
+        local ok,result=session.physics:requestStore(pawn,pc)
         if not ok or result~="release_requested" then
             log("[PHYS] E store="..tostring(ok).." reason="..tostring(result))
         end
     elseif action:find("native_select_",1,true)==1 then
-        local slot=tonumber(action:sub(15))
+        -- Fallback for mouse wheel/controller selection. The keyboard
+        -- handler below works independently of native hook firing.
+        local slot=tonumber(action:sub(#"native_select_"+1))
         local pc,pawn=localQuickController()
         if pc and pawn and session.physics and hostFor(worldOf(pawn)) then
             local ok,why=session.physics:requestSelect(pawn,slot)
             if not ok and why~="no_stored_physics_in_slot" then
-                log("[PHYS] select "..tostring(slot).." failed: "..tostring(why))
+                log("[PHYS] native select "..tostring(slot)..
+                    " blocked: "..tostring(why))
             end
         end
-    elseif action:find("quick_",1,true)==1 then
-        local slot=tonumber(action:sub(7))
+    elseif action:find("hotbar_",1,true)==1 then
+        -- v0.3.0 observed no usable 1-0 extraction in real gameplay.
+        -- Register all TEN number keys directly, without depending on a
+        -- native InventoryAction_Server post-hook that may never fire.
+        local slot=tonumber(action:sub(#"hotbar_"+1))
         local pc,pawn,sourceName=localQuickController()
         if not pc or not pawn then
-            log("QUICK "..tostring(slot).." ERROR: "..tostring(sourceName)..
-                "; key="..tostring(source))
-        elseif not session.native then
-            log("QUICK "..tostring(slot).." ERROR: native inventory bridge missing")
-        else
-            local success,why=session.native.select(pc,pawn,slot)
-            if not success then
-                log("QUICK "..tostring(slot).." ERROR: "..tostring(why))
-            elseif session.physics and hostFor(worldOf(pawn)) then
-                -- The RPC post-hook also sees the same key, but the
-                -- physics layer rejects duplicate pending transactions.
-                local ok,result=session.physics:requestSelect(pawn,slot)
-                if not ok and result~="no_stored_physics_in_slot" and
-                    result~="transaction_pending" then
-                    log("[PHYS] quick "..slot.." "..tostring(result))
-                end
+            log("[HOTBAR] key "..tostring(slot).." rejected: "..tostring(sourceName))
+            return
+        end
+        local physical=false
+        if session.physics and hostFor(worldOf(pawn)) then
+            physical=session.physics:hasSlot(slot) or
+                session.physics.unresolvedSlots[slot]==true
+            local active=session.physics.active~=nil
+            if physical or active then
+                local ok,why=session.physics:requestSelect(pawn,slot)
+                log("[HOTBAR] "..tostring(slot)..
+                    " physical="..tostring(physical)..
+                    " dispatched="..tostring(ok)..
+                    " result="..tostring(why))
+                if physical then return end
+            end
+        end
+        -- Native 1-4 remain completely game-owned; UE4SS key bind does
+        -- not issue a second RPC for regular weapons.
+        if slot>=5 and session.native then
+            local ok,why=session.native.select(pc,pawn,slot)
+            if not ok then
+                log("[HOTBAR] native slot "..slot.." failed: "..tostring(why))
             end
         end
     end
@@ -572,8 +585,9 @@ end
 -- HeldenPhysicsActor; if the player is not grabbing junk, do nothing.
 bind("E","store_physics")
 for n,keyName in ipairs({"ONE","TWO","THREE","FOUR","FIVE","SIX","SEVEN","EIGHT","NINE","ZERO"}) do
-    -- Game keeps its native 1-4 hotkeys. 5-0 use our native RPC bridge.
-    if n>=5 then bind(keyName,"quick_"..n) end
+    -- Observe all 10 keys. For native 1-4, do NOT invoke any extra
+    -- InventoryAction_Server RPC. Real equipment remains game-owned.
+    bind(keyName,"hotbar_"..n)
 end
 -- Native inventory action observes original 1-4 key selection too. Using
 -- a post-hook means the regular item has first been holstered by the game
@@ -620,4 +634,4 @@ else
     if ok then log("fallback sampled animation heartbeat active")
     else log("NO POLLER: "..tostring(err)) end
 end
-log("v0.3.0-unified: E stows RMB physics into first free native quickslot 1-0; slot selection uses GrabObject_Server.")
+log("v0.3.1-hotbar-icons: native 1-0 direct keybind selection, verified asset icons, fail-visible grab recovery.")
