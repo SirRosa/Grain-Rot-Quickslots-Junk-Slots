@@ -5,9 +5,7 @@
 local CFG = {
     ElevatorRefill = true,
     PollMillis = 500,
-    LogInventoryProbes = false, -- opt-in: FindAllOf UI dumps can stall game thread
-    LogInputHookOnce = false, -- no per-action tracing in release
-    MaxProbeEvents = 0,
+    LogInventoryProbes = false, -- opt-in: startup introspection can stall game thread
 }
 local TAG = "[GrainRotQuickJunk] "
 local function log(msg) print(TAG .. tostring(msg) .. "\n") end
@@ -460,18 +458,6 @@ local function poll()
         end
     end
 end
-local function localPawn()
-    if session.context then
-        local e=session.context.pickLocal()
-        return e and e.pawn or nil
-    end
-    for _,pc in ipairs(all("HeldenPlayerController")) do
-        local pawn
-        pcall(function() pawn=pc:GetPawn() end)
-        if valid(pawn) and isA(pawn,"HeldenCharacter") then return pawn end
-    end
-    return nil
-end
 -- Gameplay GetPawn() is NIL for the live BP_HeldenPlayerCharacter_01_C
 -- in UE4SS(6).log. The player controller owns LastPlayerChar instead.
 -- Always resolve the *local* controller and its selected player together.
@@ -612,33 +598,6 @@ if session.physics and type(RegisterHook)=="function" then
     end)
     if ok then log("[PHYS] native slot 1-0 selection post-hook active")
     else log("[PHYS] native selection post-hook unavailable: "..tostring(err)) end
-end
--- Read-only prehook: collect actual signature of key native inventory action.
-local function probeHook(path,label)
-    if type(RegisterHook)~="function" then return end
-    local ok,err=pcall(function()
-        RegisterHook(path,function(context,...)
-            if label=="InventoryAction_Server" and session.input then
-                session.input.observe(context,...)
-            end
-            if session.probEvents>=CFG.MaxProbeEvents then return end
-            session.probEvents=session.probEvents+1
-            local args={...}
-            local info={}
-            for i=1,math.min(#args,8) do
-                local a=args[i]
-                local okv,value=pcall(function() return a:get() end)
-                info[i]=tostring(okv and value or a)
-            end
-            log("HOOK "..label.." args="..#args.." ["..table.concat(info," | ").."]")
-        end)
-    end)
-    if ok then log("HOOK registered: "..label)
-    else log("HOOK unavailable "..label..": "..tostring(err)) end
-end
-if CFG.LogInputHookOnce then
-    probeHook("/Script/Helden.HeldenPlayerController:InventoryAction_Server","InventoryAction_Server")
-    probeHook("/Script/Helden.HeldenCharacter:GrabObject_Server","GrabObject_Server")
 end
 local function safePoll()
     local ok,err=pcall(poll)
