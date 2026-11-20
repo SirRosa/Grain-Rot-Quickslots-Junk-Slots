@@ -35,6 +35,19 @@ end
 local function warn(s)
     state.log("[QUICK] "..s)
 end
+-- UE4SS 3.x TArray.__newindex replaces an EXISTING element; it does not
+-- resize the Unreal FScriptArray. Never write at #array + 1 directly: doing
+-- so may access invalid memory. Use an explicit append bridge if present.
+local function safeAppend(array,entry)
+    local ok,method=pcall(function() return array.Add end)
+    if not ok or type(method)~="function" then return false,"array_add_bridge_missing" end
+    local before=arrayLen(array)
+    if before==nil then return false,"array_length_unavailable" end
+    local success,err=pcall(function() array:Add(entry) end)
+    if not success then return false,tostring(err) end
+    if arrayLen(array)~=before+1 then return false,"array_length_unchanged" end
+    return true,nil
+end
 local function makeName(i)
     local name="GrainRotQuick"..i
     -- UE4SS v3 FName() uses Find by default, so new names may resolve
@@ -112,12 +125,11 @@ function M.extend(pawn)
     -- Never keep a reference into the old FScriptArray after an append:
     -- reallocation invalidates UScriptStruct userdata addresses.
     for i=5,10 do
-        local ok,err=pcall(function() settings[i]=entries[i] end)
-        local n=arrayLen(settings)
-        if not ok or not n or n<i then
+        local ok,err=safeAppend(settings,entries[i])
+        if not ok then
             state.blocked[key]=true
-            warn("TArray append stopped at "..i.." (n="..tostring(n).."): "..tostring(err))
-            return false,"native_append_not_supported"
+            warn("TArray needs a native resize bridge at "..i..": "..tostring(err))
+            return false,"requires_native_array_bridge"
         end
         local entry=get(settings,i)
         if not entry or enumString(get(entry,"SlotName"))~="GrainRotQuick"..i then
@@ -176,12 +188,9 @@ function M.rebuildMissing(pawn)
             warn("component SlotSetting assignment failed "..i..": "..tostring(errorString))
             return false,"component_setting_failed"
         end
-        local appended,appendError=pcall(function()
-            items[i]={SlotName=name,SlotComponent=comp}
-        end)
-        local newN=arrayLen(items)
-        if not appended or not newN or newN<i then
-            warn("native ItemSlots append failed at "..i..": "..tostring(appendError))
+        local appended,appendError=safeAppend(items,{SlotName=name,SlotComponent=comp})
+        if not appended then
+            warn("native ItemSlots needs a resize bridge at "..i..": "..tostring(appendError))
             return false,"native_slot_append_failed"
         end
         local added=get(items,i)
