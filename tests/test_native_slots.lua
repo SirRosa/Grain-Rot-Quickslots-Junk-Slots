@@ -12,8 +12,8 @@ local lib=obj("KismetStringLibrary")
 function lib:Conv_StringToName(s) return s end
 local klass=obj("HeldenInventorySlotComponent")
 local property={GetPropertyFlags=function() return 0x80 end,
-    GetName=function() return "SlotIndex" end,
-    GetFullName=function() return "IntProperty SlotIndex" end}
+    GetName=function() return "InIdx" end,
+    GetFullName=function() return "IntProperty InIdx" end}
 local fn=obj("InventoryAction_Server")
 function fn:ForEachProperty(cb) cb(property) end
 StaticFindObject=function(s)
