@@ -262,7 +262,7 @@ function M.new(logger,opts)
     return setmetatable({log=logger or function()end,root=opts.root,
         scope=nil,lastPawn=nil,lastRows={},pending=nil,
         pendingKind=nil,pendingTicks=0,restoreAttempts={},
-        spawned={},lastSaved=nil,ticks=0},M)
+        spawned={},lastSaved=nil,ticks=0,emptyStreak=0},M)
 end
 function M:resetWorld()
     -- Do not carry potentially invalid UObject actor refs across map travel.
@@ -270,6 +270,7 @@ function M:resetWorld()
     self.scope=nil;self.lastPawn=nil;self.lastRows={}
     self.pending=nil;self.pendingKind=nil;self.pendingTicks=0
     self.restoreAttempts={};self.spawned={};self.lastSaved=nil
+    self.emptyStreak=0
 end
 
 function M:fileFor(slot)
@@ -321,7 +322,7 @@ function M:tick(pc,pawn,save,world)
     local scope=tostring(slot)..":"..saveName
     if scope~=self.scope then
         self.scope=scope;self.lastPawn=nil;self.lastRows={}
-        self.ticks=0;self.lastSaved=nil;self.spawned={}
+        self.ticks=0;self.lastSaved=nil;self.spawned={};self.emptyStreak=0
         self.restoreAttempts={};self.pendingTicks=0;self.pendingKind=nil
         local rows,reason=self:readManifest(slot,saveName,played)
         self.pending=rows and toRecordTable(rows) or nil
@@ -399,16 +400,24 @@ function M:tick(pc,pawn,save,world)
     end
     -- Never overwrite a pre-death or pre-reload backup with an empty pawn.
     -- A failed restoration stays visible in logs and the manifest persists.
-    if not self.pending and self.ticks>=4 and self.ticks%5==0 then
-        local latest=snapshot(pawn)
-        -- Persist empty only after a previously observed real inventory has
-        -- been explicitly cleared for >=10 polls, not on loading/death.
-        if #latest>0 or #self.lastRows==0 then
-            local ok,reason=self:writeManifest(slot,saveName,played,latest)
-            if not ok and self.ticks==5 then
-                self.log("[PERSIST] backup unavailable: "..tostring(reason))
+    if not self.pending then
+        if #records==0 then
+            self.emptyStreak=self.emptyStreak+1
+        else
+            self.emptyStreak=0
+        end
+        if self.ticks>=4 and self.ticks%5==0 then
+            local latest=snapshot(pawn)
+            -- Explicitly clearing the last extra slot must also persist.
+            -- Otherwise a stale manifest could resurrect an intentionally
+            -- dropped/sold/consumed item after a later restart.
+            if #latest>0 or #self.lastRows==0 or self.emptyStreak>=5 then
+                local ok,reason=self:writeManifest(slot,saveName,played,latest)
+                if not ok and self.ticks==5 then
+                    self.log("[PERSIST] backup unavailable: "..tostring(reason))
+                end
+                self.lastRows=latest
             end
-            self.lastRows=latest
         end
     end
     return true,self.pending and ("recovering_"..tostring(self.pendingKind)) or "ready"
