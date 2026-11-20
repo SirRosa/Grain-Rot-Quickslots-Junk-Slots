@@ -1,8 +1,20 @@
 # Grain Rot — Quickslots 1–0 z przedmiotami fizycznymi
 
-**v0.3.0-unified-physics** — 10 prawdziwych quickslotów broni/przedmiotów + współdzielona warstwa przechowywania obiektów podnoszonych na PPM. Osobny system **Junk Slots, M4/M5, G/H i HUD J1–J10 usunięty**.
+**v0.3.1-hotbar-icons** — poprawka **przedmiot chował się po PPM+E, lecz nie dał się wyciągnąć** oraz brakujących miniaturek. Wspólny pasek 1–0 z natywnym UMG i zabezpieczeniem przed znikaniem przedmiotów. Osobny system **Junk Slots, M4/M5, G/H i HUD J1–J10 usunięty**.
 
 > Wersja eksperymentalna, **host-only** dla fizycznego chowania przedmiotów. Implementacja opiera się na USMAP gry **Helden UE 5.7.4** i natywnych RPC, ale efekt chwytu musi zostać potwierdzony w samej grze. Przed testami **zrób kopię zapisu**.
+
+## Poprawka 0.3.1 — wyciąganie i rzeczywiste ikony
+
+**Ustalenia z kodu i zrzutu obiektów gry:**
+
+- W v0.3.0 wybór zapisanych obiektów fizycznych w slotach 1–4 zależał od `InventoryAction_Server` post-hooka. Ten hook nie musi się uruchomić, gdy gra przetwarza klawisz. Teraz mod **rejestruje bezpośrednio wszystkie klawisze 1–0** i wybiera fizyczny obiekt bez oczekiwania na natywny hook. Zwykłe klawisze 1–4 nie wysyłają dodatkowego RPC dla wyposażenia, a broń w 5–0 nadal używa oryginalnego `InventoryAction_Server`.
+- Natywny Blueprint `/Game/UI/Inventory/WBP_InventorySlot` ma pole **`Icon` typu UMG.Image**, odrębne od `InputIcon` przeznaczonego na oznaczenie klawisza. Zamiast tylko `5+`, mod ustawia na `Icon` rzeczywistą miniaturę z `HeldenConstructAsset.Icon` (meble i budowle).
+- Dla przedmiotów bez własnej miniatury mod korzysta z istniejącej tekstury złota **`/Game/UI/Textures/Icons/T_Gold.T_Gold`**, potwierdzonej w UE4SS ObjectDump wersji 5.7.4. Gdy tekstura nie jest załadowana, działa awaryjne `[$]`.
+- **Zapobieganie znikaniu:** `E` nie schowa przedmiotu, jeśli w grze brakuje docelowego widżetu HUD lub tekstowego oznaczenia. Jeśli gra odrzuci `GrabObject_Server` lub nie potwierdzi chwytu po wybraniu, przedmiot **pozostanie widoczny przed postacią**, będzie można ponownie chwycić go PPM; mod nie ukryje go ponownie.
+- Widoczne miniaturki są przywracane po wczytaniu zapisu tylko wtedy, kiedy odpowiedni natywny pasek UI już istnieje. Po opróżnieniu slotu przywracany jest oryginalny pędzel i etykieta gry. Nie ma kosztownego generowania 3D ikon w każdej klatce.
+
+**Testy:** potwierdzono wywołania na symulowanym UE4SS i przywracanie widoczności po błędnym RPC, nie przetestowano jeszcze faktycznego wykonywania `GrabObject_Server(InGrabData)` w uruchomionej grze. Przy odmowie chwytu sprawdź wpis `[PHYS] RECOVERED ON GROUND` w `UE4SS.log`. Schowane przedmioty, które gra już usunęła podczas poprzednich zapisów, mogą pozostać nieodzyskiwalne.
 
 ## Sterowanie
 
@@ -12,7 +24,7 @@
 4. **1–0** — wybranie zajętego fizycznym obiektem quickslota przenosi go przed postać i uruchamia **`HeldenCharacter.GrabObject_Server(InGrabData)`**, aby chwycił go natywny system PPM. Gdy gracz trzyma obiekt i przełącza na inny slot, mod stara się ponownie schować poprzedni do tego samego miejsca.
 5. **E na aktualnie wyjętym obiekcie** — schowaj go z powrotem do przypisanego quickslota. **Zwykłe puszczenie PPM** pozostawia fizyczny obiekt w świecie i zwalnia jego slot.
 
-Przedmioty fizyczne są oznaczone na **oryginalnym pasku 1–0** jako `1+`, `5+`, itd. Jeśli zapis wskazuje na przedmiot, którego aktora silnik jeszcze nie załadował, może być widoczny `1?`. **Nie ma nowego paska ani dziesięciu osobnych Junk Slots**.
+Przedmioty fizyczne są pokazywane **ikoną na oryginalnym pasku 1–0**, z etykietą `1+`, `5+`, itd. Jeśli zapis wskazuje na przedmiot, którego aktora silnik jeszcze nie załadował, może być widoczny `1?`. **Nie ma nowego paska ani dziesięciu osobnych Junk Slots**.
 
 ## Wspólne miejsce dla broni i obiektów fizycznych
 
@@ -38,7 +50,7 @@ Podczas operacji nigdy nie wykonuje `PhysGrabData.Target=nil`, `GrabPhysHandle:R
 
 1. Jeśli nadal używasz **starego Junk Slots**, najpierw wyciągnij z niego wszystkie schowane fizyczne przedmioty **w starej wersji moda i przed zamknięciem gry**. W przeciwnym razie pamięć starego systemu utraci do nich referencje po restarcie.
 2. Zamknij grę, zrób kopię zapisu i **usuń cały poprzedni folder** `Helden/Binaries/Win64/ue4ss/Mods/GrainRotQuickJunk` (nie kopiuj plików na stare moduły).
-3. Wypakuj nowy `GrainRotQuickJunk-v0.3.0-unified-physics.zip` tak, by folder `GrainRotQuickJunk` znalazł się w `ue4ss/Mods/`.
+3. Wypakuj nowy `GrainRotQuickJunk-v0.3.1-hotbar-icons.zip` tak, by folder `GrainRotQuickJunk` znalazł się w `ue4ss/Mods/`.
 4. Sprawdź na **hoście**, na zbędnym przedmiocie: PPM, E, pojawienie się `+` na wolnym slocie, wybór slotu, chwyt, ponowne E i celowe puszczenie PPM. Następnie osobno sprawdź zwykłą broń, zapis oraz respawn.
 
 W logu `UE4SS.log` szukaj `[GrainRotQuickJunk] [PHYS]` i `[PHYS SAVE]` oraz komunikatów `native_grab_not_confirmed`, `native_release_timeout_release_RMB` i `saved_physics_actor_not_loaded`. Zgłoś je razem z logiem, jeśli w grze native RPC nie wywołuje oczekiwanego chwytu.
