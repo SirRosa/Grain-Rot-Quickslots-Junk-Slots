@@ -96,9 +96,15 @@ function M.sync(pawn)
                         if applied then
                             entry.changed=true
                             changed=changed+1
-                            log("[VISUAL] hidden holstered extra slot "..(idx+1).." item="..key)
+                            if not entry.logged then
+                                entry.logged=true
+                                log("[VISUAL] hidden holstered extra slot "..(idx+1).." item="..key)
+                            end
                         else
-                            log("[VISUAL] failed to hide slot "..(idx+1)..": "..tostring(reason))
+                            if not entry.warned then
+                                entry.warned=true
+                                log("[VISUAL] failed to hide slot "..(idx+1)..": "..tostring(reason))
+                            end
                         end
                     end
                 elseif entry then
