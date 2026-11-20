@@ -95,6 +95,16 @@ end
 local function fallbackTexture()
     if fallbackChecked then return fallback,fallbackKind end
     fallbackChecked=true
+    -- This is an ACTUAL loaded Grain Rot Texture2D from the user's UE5.7.4
+    -- ObjectDump, not an invented path: /Game/UI/Textures/Icons/T_Gold.
+    local goldPath="/Game/UI/Textures/Icons/T_Gold.T_Gold"
+    if type(StaticFindObject)=="function" then
+        local ok,tex=pcall(StaticFindObject,goldPath)
+        if ok and valid(tex) then
+            fallback=tex;fallbackKind="game_gold_texture"
+            return fallback,fallbackKind
+        end
+    end
     -- Native UI item textures with "coin", "gold" or "money" identifiers
     -- make a sensible generic junk icon, avoiding expensive 3D capture.
     local singleton
