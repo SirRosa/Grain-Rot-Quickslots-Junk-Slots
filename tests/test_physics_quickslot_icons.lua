@@ -90,4 +90,19 @@ assert(w.SlotWidgets[5].InputIcon.InputKeyText.value=="5?")
 Icons.reset()
 assert(w.SlotWidgets[5].InputIcon.InputKeyText.value=="5")
 assert(w.SlotWidgets[5].Icon.visibility==2)
-io.write("PASS: native construct thumbnail, currency placeholder, missing slot label, brush restoration and no repeated image setters\n")
+-- This is the exact T_Gold path from actual 5.7.4 ObjectDump:
+-- game already loads the asset, no generated images or guessed names.
+local gold=UObject("Texture2D /Game/UI/Textures/Icons/T_Gold.T_Gold")
+StaticFindObject=function(path)
+    if path=="/Game/UI/Textures/Icons/T_Gold.T_Gold" then
+        return gold
+    end
+end
+physics.unresolvedSlots[5]=nil
+physics.slots[5]={identity="junk_gold",actor=junk,state="stored"}
+assert(Icons.refresh(pc,physics))
+assert(w.SlotWidgets[5].Icon.texture==gold,
+    "iconless junk must display the game's actual T_Gold icon")
+assert(w.SlotWidgets[5].InputIcon.InputKeyText.value=="5+")
+Icons.reset()
+io.write("PASS: native construct thumbnail, actual in-game T_Gold junk icon, missing slot label, brush restoration and bounded UMG writes\n")
