@@ -182,9 +182,16 @@ local function paint(slot,entry,pc)
     local before=cache[slot]
     if not before or before.widget~=key then
         local oldBrush=get(img,"Brush")
-        local oldVis
+        local oldVis,oldWidgetOpacity,oldRetainerOpacity
+        local retainer=get(widget,"RetainerBox")
         pcall(function() oldVis=img:GetVisibility() end)
-        before={widget=key,icon=img,label=label,
+        pcall(function() oldWidgetOpacity=widget:GetRenderOpacity() end)
+        if valid(retainer) then
+            pcall(function() oldRetainerOpacity=retainer:GetRenderOpacity() end)
+        end
+        before={widget=key,icon=img,label=label,widgetObj=widget,
+            retainer=retainer,originalWidgetOpacity=oldWidgetOpacity,
+            originalRetainerOpacity=oldRetainerOpacity,
             originalLabel=labelValue(label),
             originalBrush=oldBrush,originalVisibility=oldVis,
             identity=nil,texture=nil}
@@ -207,6 +214,12 @@ local function paint(slot,entry,pc)
         end
         before.identity=id
         before.texture=tex
+    end
+    -- WBP_InventorySlot.SetupForInvalidAsset can fade an EMPTY slot via
+    -- its RetainerBox; setting the brush alone would not show the icon.
+    pcall(function() widget:SetRenderOpacity(1) end)
+    if valid(before.retainer) then
+        pcall(function() before.retainer:SetRenderOpacity(1) end)
     end
     pcall(function() img:SetVisibility(0) end)
     pcall(function() img:SetRenderOpacity(1) end)
@@ -242,6 +255,14 @@ local function clear(slot,pc)
             pcall(function() image:SetVisibility(previous.originalVisibility) end)
         else pcall(function() image:SetVisibility(2) end) end
     end
+    if previous.originalWidgetOpacity~=nil then
+        pcall(function() w:SetRenderOpacity(previous.originalWidgetOpacity) end)
+    end
+    if valid(previous.retainer) and previous.originalRetainerOpacity~=nil then
+        pcall(function()
+            previous.retainer:SetRenderOpacity(previous.originalRetainerOpacity)
+        end)
+    end
     local label=get(get(w,"InputIcon"),"InputKeyText")
     changeLabel(label,DIGITS[slot])
     cache[slot]=nil
@@ -276,6 +297,16 @@ function M.reset()
             else
                 pcall(function() img:SetVisibility(2) end)
             end
+        end
+        if valid(previous.widgetObj) and previous.originalWidgetOpacity~=nil then
+            pcall(function()
+                previous.widgetObj:SetRenderOpacity(previous.originalWidgetOpacity)
+            end)
+        end
+        if valid(previous.retainer) and previous.originalRetainerOpacity~=nil then
+            pcall(function()
+                previous.retainer:SetRenderOpacity(previous.originalRetainerOpacity)
+            end)
         end
         if valid(previous.label) and previous.originalLabel then
             changeLabel(previous.label,previous.originalLabel)
